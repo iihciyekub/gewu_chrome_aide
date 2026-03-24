@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GEWU AIDE</title>
+    <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="all.min.css" />
+</head>
+<body>
+  <div class="app">
+    <div class="panel panel--collapsible" id="openaiSettingsPanel">
+      <button class="panel-header" id="openaiSettingsToggle" aria-expanded="true">
+        <span class="panel-title">OpenAI Settings</span>
+        <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+      </button>
+      <div class="panel-body" id="openaiSettingsBody">
+        <div class="panel-section">
+          <div class="panel-subtitle">API Key</div>
+          <div class="field-row">
+            <input id="openaiApiKeyInput" type="password" placeholder="sk-..." autocomplete="off" />
+            <button id="openaiApiKeyToggle" class="icon-button" title="Show/Hide API Key">
+              <i class="fa-solid fa-eye" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div class="panel-actions">
+            <button id="openaiApiKeySaveBtn" class="button button--ghost">Save API Key</button>
+            <button id="openaiApiKeyClearBtn" class="button button--ghost">Clear</button>
+          </div>
+          <div id="openaiApiKeyHint" class="helper">Stored in extension storage for all pages.</div>
+        </div>
+        <div class="panel-section">
+          <div class="panel-subtitle">Chat Model</div>
+          <div class="field-row">
+            <select id="openaiChatModelSelect">
+              <option value="gpt-4o-mini">gpt-4o-mini</option>
+              <option value="gpt-4.1-nano">gpt-4.1-nano</option>
+              <option value="gpt-5-nano">gpt-5-nano</option>
+              <option value="__custom__">Custom</option>
+            </select>
+          </div>
+          <div class="field-row" id="openaiChatModelCustomRow" style="display:none;">
+            <input id="openaiChatModelCustomInput" type="text" placeholder="custom model id" autocomplete="off" />
+          </div>
+          <div class="panel-actions">
+            <button id="openaiChatModelTestBtn" class="button button--ghost">Test</button>
+          </div>
+          <div id="openaiChatModelHint" class="helper">Applies to all chat requests.</div>
+        </div>
+      </div>
+    </div>
+    <div class="button-container">
+      <button id="openEasyScholarBtn" class="button">
+        <i class="fa-solid fa-toggle-off" aria-hidden="true"></i>
+        <span class="button-label">Enable EasyScholar</span>
+      </button>
+      <button id="openWosDoiQueryBtn" class="button">
+        <i class="fa-solid fa-toggle-off" aria-hidden="true"></i>
+        <span class="button-label">Enable DOI Batch Query</span>
+      </button>
+      <button id="openDoiPdfDownloadBtn" class="button">
+        <i class="fa-solid fa-toggle-off" aria-hidden="true"></i>
+        <span class="button-label">Enable DOI PDF Download</span>
+      </button>
+      <button id="openOpenAIChatBtn" class="button">
+        <i class="fa-solid fa-toggle-off" aria-hidden="true"></i>
+        <span class="button-label">Enable OpenAI Chat</span>
+      </button>
+    </div>
+    <div id="sidDisplay" class="status"></div>
+    <button id="clearDoiBtn" class="button" style="display:flex;align-items:center;gap:8px;margin-bottom:4px;width:100%;justify-content:flex-start;">
+      <i class="fa-solid fa-trash" aria-hidden="true"></i>
+      <span class="button-label" id="doiListDisplay" style="flex:1;text-align:left;"></span>
+    </button>
+  </div>
+
+  <script src="popup.js"></script>
+
+  <!--
+    This HTML file opens when you click on icon from the toolbar.
+
+    To begin the development, run `npm run watch`.
+    To create a production bundle, use `npm run build`.
+  -->
+</body>
+</html>

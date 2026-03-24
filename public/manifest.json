@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "GEWU aide",
+  "$schema": "https://json.schemastore.org/chrome-manifest.json",
+  "version": "0.1.0",
+  "description": "GEWU aide Chrome Extension",
+  "icons": {
+    "16": "icons/icon_16.png",
+    "32": "icons/icon_32.png",
+    "48": "icons/icon_48.png",
+    "128": "icons/icon_128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "GEWU aide",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "storage",
+    "clipboardWrite",
+    "activeTab",
+    "scripting"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_idle",
+      "js": [
+        "contentScript.js"
+      ]
+    },
+    {
+      "matches": [
+        "*://www.webofscience.com/*",
+        "*://*.webofscience.com/*"
+      ],
+      "run_at": "document_start",
+      "js": [
+        "z-Wos-loader.js"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "injected.js",
+        "z-Wos.js",
+        "jquery-3.7.0.js",
+        "all.min.css",
+        "all.min.js",
+        "pub-fun.js",
+        "z-easyscholar.js",
+        "z-wos-doi-query.js",
+        "z-doi-pdf-download.js",
+        "z-chat.js",
+        "chatgpt-prompts-quickload.js",
+        "prompts/wos-query.md",
+        "prompts/any-chat.md",
+        "module-bridge.js",
+        "webfonts/*.woff2",
+        "webfonts/*.ttf"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
