@@ -91,7 +91,11 @@ function clearJournalHistory() {
 }
 
 async function getPublicationRank(SO) {
-    const apiKey = window.easyscholar_api_key || "efb681cf46f2432da30431e8eaaf4beb";
+    const apiKey = (window.easyscholar_api_key || "").trim();
+    if (!apiKey) {
+        console.error("EasyScholar API key is required before querying");
+        return null;
+    }
     const encoded = encodeURIComponent(SO);
     const url = `https://www.easyscholar.cc/open/getPublicationRank?secretKey=${apiKey}&publicationName=${encoded}`;
     try {
@@ -192,10 +196,10 @@ async function getPublicationRank(SO) {
     const savedTop = localStorage.getItem(POSITION_TOP_KEY) || "100px";
     const savedLeft = localStorage.getItem(POSITION_LEFT_KEY) || null;
     const savedSettingsVisible = localStorage.getItem(SETTINGS_VISIBLE_KEY);
-    const savedApiKey = await loadApiKey(API_KEY_STORAGE, "efb681cf46f2432da30431e8eaaf4beb");
+    const savedApiKey = await loadApiKey(API_KEY_STORAGE, "");
 
     // Initialize global variable
-    window.easyscholar_api_key = savedApiKey;
+    window.easyscholar_api_key = savedApiKey.trim();
 
     // Main container
     const box = document.createElement("div")
@@ -371,7 +375,7 @@ async function getPublicationRank(SO) {
     apiInput.value = maskApiKey(savedApiKey);
 
     // Store actual API key value
-    let actualApiKey = savedApiKey;
+    let actualApiKey = savedApiKey.trim();
     let isApiFocused = false;
 
     // Show full content on focus
@@ -389,7 +393,7 @@ async function getPublicationRank(SO) {
     // Real-time update
     apiInput.addEventListener("input", (e) => {
         if (isApiFocused) {
-            actualApiKey = e.target.value;
+            actualApiKey = e.target.value.trim();
             // Update global variable
             window.easyscholar_api_key = actualApiKey;
             // Save to localStorage
@@ -440,6 +444,35 @@ async function getPublicationRank(SO) {
     let historyIndex = -1;
     let currentInput = "";
     let statusBarTimer = null; // 用于清除旧的定时器
+
+    function setStatus(message, background) {
+        if (!statusBar) {
+            return;
+        }
+        statusBar.textContent = message;
+        statusBar.style.background = background;
+    }
+
+    function ensureApiKeyConfigured() {
+        actualApiKey = (actualApiKey || "").trim();
+        window.easyscholar_api_key = actualApiKey;
+        if (actualApiKey) {
+            return true;
+        }
+        console.warn("EasyScholar API key is not configured");
+        row1.style.display = "flex";
+        localStorage.setItem(SETTINGS_VISIBLE_KEY, "true");
+        setStatus("Please set EasyScholar API Key first", "#D32F2F");
+        apiInput.value = "";
+        setTimeout(() => {
+            try {
+                apiInput.focus({ preventScroll: true });
+            } catch (error) {
+                apiInput.focus();
+            }
+        }, 0);
+        return false;
+    }
 
     soInput.addEventListener("keydown", async (e) => {
         const history = getJournalHistory();
@@ -520,6 +553,7 @@ async function getPublicationRank(SO) {
         } else if (e.key === "Enter") {
             const so = soInput.value.trim();
             if (!so) return;
+            if (!ensureApiKeyConfigured()) return;
 
             // Reset history index
             historyIndex = -1;
@@ -535,25 +569,23 @@ async function getPublicationRank(SO) {
             queryBtn.style.background = "rgba(56,142,60,1)";
             queryBtn.style.transform = "scale(0.95)";
 
-            statusBar.textContent = `Querying journal: ${so}`;
-            statusBar.style.background = "#FFA500";
+            setStatus(`Querying journal: ${so}`, "#FFA500");
             console.log(`Querying journal: ${so}`);
             const result = await getPublicationRank(so);
 
             // Display result in table
             if (result) {
                 displayResultTable(result);
+                setStatus("Query completed", "#16825D");
+            } else {
+                setStatus("Query failed", "#D32F2F");
             }
-
-            statusBar.textContent = "Query completed";
-            statusBar.style.background = "#16825D";
 
             setTimeout(() => {
                 queryBtn.style.background = originalBg;
                 queryBtn.style.transform = "scale(1)";
                 isQuerying = false;
-                statusBar.textContent = "Ready";
-                statusBar.style.background = "#007ACC";
+                setStatus("Ready", "#007ACC");
             }, 3000);
         } else {
             // Reset history index when typing
@@ -703,23 +735,24 @@ async function getPublicationRank(SO) {
                 soInput.value = capturedText;
                 // Auto-stop capture after successful capture
                 stopCapture();
+                if (!ensureApiKeyConfigured()) {
+                    return;
+                }
 
                 // Auto-execute query
-                statusBar.textContent = `Querying journal: ${capturedText}`;
-                statusBar.style.background = "#FFA500";
+                setStatus(`Querying journal: ${capturedText}`, "#FFA500");
                 console.log(`Auto-querying after 1s: ${capturedText}`);
                 const result = await getPublicationRank(capturedText);
 
                 // Display result in table
                 if (result) {
                     displayResultTable(result);
+                    setStatus("Query completed", "#16825D");
+                } else {
+                    setStatus("Query failed", "#D32F2F");
                 }
-
-                statusBar.textContent = "Query completed";
-                statusBar.style.background = "#16825D";
                 setTimeout(() => {
-                    statusBar.textContent = "Ready";
-                    statusBar.style.background = "#007ACC";
+                    setStatus("Ready", "#007ACC");
                 }, 3000);
             }, 1000); // 1 second delay
         }
@@ -755,21 +788,23 @@ async function getPublicationRank(SO) {
             
             // When modifier key is released, execute query if text was captured
             if (lastCapturedText) {
-                statusBar.textContent = `Querying journal: ${lastCapturedText}`;
-                statusBar.style.background = "#FFA500";
+                if (!ensureApiKeyConfigured()) {
+                    lastCapturedText = "";
+                    return;
+                }
+                setStatus(`Querying journal: ${lastCapturedText}`, "#FFA500");
                 console.log(`Querying captured text: ${lastCapturedText}`);
                 const result = await getPublicationRank(lastCapturedText);
 
                 // Display result in table
                 if (result) {
                     displayResultTable(result);
+                    setStatus("Query completed", "#16825D");
+                } else {
+                    setStatus("Query failed", "#D32F2F");
                 }
-
-                statusBar.textContent = "Query completed";
-                statusBar.style.background = "#16825D";
                 setTimeout(() => {
-                    statusBar.textContent = "Ready";
-                    statusBar.style.background = "#007ACC";
+                    setStatus("Ready", "#007ACC");
                 }, 3000);
 
                 lastCapturedText = "";
@@ -831,6 +866,9 @@ async function getPublicationRank(SO) {
             console.warn("Please enter journal name");
             return;
         }
+        if (!ensureApiKeyConfigured()) {
+            return;
+        }
 
         // Prevent multiple clicks
         if (isQuerying) {
@@ -843,26 +881,24 @@ async function getPublicationRank(SO) {
         queryBtn.style.background = "rgba(56,142,60,1)";
         queryBtn.style.transform = "scale(0.95)";
 
-        statusBar.textContent = `Querying journal: ${so}`;
-        statusBar.style.background = "#FFA500";
+        setStatus(`Querying journal: ${so}`, "#FFA500");
         console.log(`Querying journal: ${so}`);
         const result = await getPublicationRank(so);
 
         // Display result in table
         if (result) {
             displayResultTable(result);
+            setStatus("Query completed", "#16825D");
+        } else {
+            setStatus("Query failed", "#D32F2F");
         }
-
-        statusBar.textContent = "Query completed";
-        statusBar.style.background = "#16825D";
 
         // Reset button state
         setTimeout(() => {
             queryBtn.style.background = originalBg;
             queryBtn.style.transform = "scale(1)";
             isQuerying = false;
-            statusBar.textContent = "Ready";
-            statusBar.style.background = "#007ACC";
+            setStatus("Ready", "#007ACC");
         }, 3000);
     });
 
