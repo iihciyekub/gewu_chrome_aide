@@ -5,11 +5,19 @@ import './popup.css';
 (function() {
   const CHAT_API_KEY_STORAGE_KEY = 'wosOpenaiApiKey';
   const CHAT_MODEL_STORAGE_KEY = 'wosOpenaiChatModel';
+  const WOS_QUERY_PROVIDER_STORAGE_KEY = 'wosQueryProvider';
+  const WOS_QUERY_ENABLED_STORAGE_KEY = 'wosQueryEnabled';
+  const WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY = 'wosOpenaiVerified';
+  const WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY = 'wosLmStudioVerified';
+  const LM_STUDIO_BASE_URL_STORAGE_KEY = 'wosLmStudioBaseUrl';
+  const LM_STUDIO_MODEL_STORAGE_KEY = 'wosLmStudioModel';
+  const LM_STUDIO_API_KEY_STORAGE_KEY = 'wosLmStudioApiKey';
   const EASYSCHOLAR_API_KEY_STORAGE_KEY = 'wos-easyscholar-api-key';
   const EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY = 'wos-easyscholar-api-key-verified';
   const OPENAI_SETTINGS_COLLAPSED_KEY = 'wosOpenaiSettingsCollapsed';
   const EASYSCHOLAR_SETTINGS_COLLAPSED_KEY = 'wosEasyScholarSettingsCollapsed';
   const EASYSCHOLAR_API_KEY_SYNC_EVENT = '__EASYSCHOLAR_API_KEY_SYNC__';
+  const WOS_QUERY_ACCESS_SYNC_EVENT = '__WOS_QUERY_ACCESS_SYNC__';
 
   // ========== Status Management ==========
   const statusClasses = ['status--success', 'status--error', 'status--info', 'status--muted'];
@@ -19,18 +27,6 @@ import './popup.css';
     element.classList.remove(...statusClasses);
     if (variant) {
       element.classList.add(variant);
-    }
-  };
-
-  const setEasyScholarToggle = (button, enabled) => {
-    const icon = button.querySelector('i');
-    const label = button.querySelector('.button-label');
-    if (enabled) {
-      icon.className = 'fa-solid fa-toggle-on';
-      label.textContent = 'Disable EasyScholar';
-    } else {
-      icon.className = 'fa-solid fa-toggle-off';
-      label.textContent = 'Enable EasyScholar';
     }
   };
 
@@ -129,6 +125,8 @@ import './popup.css';
     const easyScholarSettingsBody = document.getElementById('easyScholarSettingsBody');
 
     const apiKeyInput = document.getElementById('openaiApiKeyInput');
+    const openaiApiSettingsSection = document.getElementById('openaiApiSettingsSection');
+    const openaiModelSettingsSection = document.getElementById('openaiModelSettingsSection');
     const apiKeyToggleBtn = document.getElementById('openaiApiKeyToggle');
     const apiKeySaveBtn = document.getElementById('openaiApiKeySaveBtn');
     const apiKeyClearBtn = document.getElementById('openaiApiKeyClearBtn');
@@ -138,14 +136,26 @@ import './popup.css';
     const easyScholarApiKeySaveBtn = document.getElementById('easyScholarApiKeySaveBtn');
     const easyScholarApiKeyTestBtn = document.getElementById('easyScholarApiKeyTestBtn');
     const easyScholarApiKeyClearBtn = document.getElementById('easyScholarApiKeyClearBtn');
+    const easyScholarWebsiteBtn = document.getElementById('easyScholarWebsiteBtn');
     const easyScholarApiKeyHint = document.getElementById('easyScholarApiKeyHint');
     const chatModelSelect = document.getElementById('openaiChatModelSelect');
     const chatModelHint = document.getElementById('openaiChatModelHint');
     const chatModelCustomRow = document.getElementById('openaiChatModelCustomRow');
     const chatModelCustomInput = document.getElementById('openaiChatModelCustomInput');
     const chatModelTestBtn = document.getElementById('openaiChatModelTestBtn');
+    const wosQueryProviderSelect = document.getElementById('wosQueryProviderSelect');
+    const wosQueryProviderEnabledToggle = document.getElementById('wosQueryProviderEnabledToggle');
+    const wosQueryProviderDetails = document.getElementById('wosQueryProviderDetails');
+    const wosQueryProviderHint = document.getElementById('wosQueryProviderHint');
+    const lmStudioSettingsSection = document.getElementById('lmStudioSettingsSection');
+    const lmStudioBaseUrlInput = document.getElementById('lmStudioBaseUrlInput');
+    const lmStudioModelInput = document.getElementById('lmStudioModelInput');
+    const lmStudioApiKeyInput = document.getElementById('lmStudioApiKeyInput');
+    const lmStudioApiKeyToggle = document.getElementById('lmStudioApiKeyToggle');
+    const lmStudioSaveBtn = document.getElementById('lmStudioSaveBtn');
+    const lmStudioTestBtn = document.getElementById('lmStudioTestBtn');
+    const lmStudioHint = document.getElementById('lmStudioHint');
 
-    const openEasyScholarBtn = document.getElementById('openEasyScholarBtn');
     const openWosDoiQueryBtn = document.getElementById('openWosDoiQueryBtn');
     const openDoiPdfDownloadBtn = document.getElementById('openDoiPdfDownloadBtn');
     const sidDisplay = document.getElementById('sidDisplay');
@@ -197,14 +207,16 @@ import './popup.css';
     });
 
     // 所有面板默认状态为未开启（false），不从本地存储读取
-    let isEasyScholarEnabled = false;
     let isWosDoiQueryEnabled = false;
     let isDoiPdfDownloadEnabled = false;
     let currentEasyScholarApiKey = '';
     let currentEasyScholarVerified = false;
+    let currentWosQueryProvider = 'openai';
+    let currentWosQueryEnabled = false;
+    let currentOpenAIVerified = false;
+    let currentLmStudioVerified = false;
 
     // 初始化按钮状态为 Enable（未开启）
-    setEasyScholarToggle(openEasyScholarBtn, false);
     setWosDoiQueryToggle(openWosDoiQueryBtn, false);
     setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, false);
 
@@ -289,6 +301,7 @@ import './popup.css';
           setStatus(sidDisplay, 'Failed to save API key', 'status--error');
           return;
         }
+        setProviderVerifiedState('openai', false);
         updateApiKeyHint('API key saved for all pages.', 'status--success');
         setStatus(sidDisplay, 'API key saved', 'status--success');
       });
@@ -439,6 +452,232 @@ import './popup.css';
       }
     };
 
+    const updateWosQueryProviderHint = (message, variant) => {
+      if (!wosQueryProviderHint) return;
+      wosQueryProviderHint.textContent = message;
+      wosQueryProviderHint.classList.remove(...statusClasses);
+      if (variant) {
+        wosQueryProviderHint.classList.add(variant);
+      }
+    };
+
+    const updateLmStudioHint = (message, variant) => {
+      if (!lmStudioHint) return;
+      lmStudioHint.textContent = message;
+      lmStudioHint.classList.remove(...statusClasses);
+      if (variant) {
+        lmStudioHint.classList.add(variant);
+      }
+    };
+
+    const getCurrentProviderVerified = () => (
+      currentWosQueryProvider === 'lmstudio' ? currentLmStudioVerified : currentOpenAIVerified
+    );
+
+    const syncWosQueryAccessToTab = (tabId, detail, onComplete) => {
+      if (!chrome.scripting || !chrome.scripting.executeScript) {
+        onComplete(new Error('chrome.scripting is unavailable'));
+        return;
+      }
+      chrome.scripting.executeScript(
+        {
+          target: { tabId },
+          world: 'MAIN',
+          func: (syncDetail, eventName) => {
+            document.dispatchEvent(new CustomEvent(eventName, {
+              detail: syncDetail
+            }));
+          },
+          args: [detail, WOS_QUERY_ACCESS_SYNC_EVENT],
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            onComplete(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          onComplete(null);
+        }
+      );
+    };
+
+    const syncWosQueryAccessToActiveTab = () => {
+      const detail = {
+        provider: currentWosQueryProvider,
+        enabled: currentWosQueryEnabled,
+        verified: getCurrentProviderVerified()
+      };
+      withActiveTab((tab) => {
+        if (!tab) return;
+        syncWosQueryAccessToTab(tab.id, detail, (error) => {
+          if (error) {
+            console.warn('Failed to sync WOS query access to page:', error.message);
+          }
+        });
+      });
+    };
+
+    const updateWosQueryAccessHint = () => {
+      const providerLabel = currentWosQueryProvider === 'lmstudio' ? 'LM Studio' : 'OpenAI';
+      if (!currentWosQueryEnabled) {
+        updateWosQueryProviderHint('WOS Query is disabled. Turn it on to allow the tab to appear.', 'status--muted');
+        return;
+      }
+      if (!getCurrentProviderVerified()) {
+        updateWosQueryProviderHint(`${providerLabel} is selected, but it must pass Test before WOS Query appears.`, 'status--info');
+        return;
+      }
+      updateWosQueryProviderHint(`WOS Query is enabled and verified with ${providerLabel}.`, 'status--success');
+    };
+
+    const setProviderVerifiedState = (provider, verified) => {
+      const storageKey = provider === 'lmstudio'
+        ? WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY
+        : WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY;
+      if (provider === 'lmstudio') {
+        currentLmStudioVerified = Boolean(verified);
+      } else {
+        currentOpenAIVerified = Boolean(verified);
+      }
+      chrome.storage.local.set({ [storageKey]: Boolean(verified) }, () => {
+        if (chrome.runtime.lastError) {
+          console.warn('Failed to persist provider verified state:', chrome.runtime.lastError.message);
+          return;
+        }
+        updateWosQueryAccessHint();
+        syncWosQueryAccessToActiveTab();
+      });
+    };
+
+    const updateProviderVisibility = () => {
+      if (!wosQueryProviderSelect || !lmStudioSettingsSection || !openaiApiSettingsSection || !openaiModelSettingsSection) return;
+      const isEnabled = Boolean(currentWosQueryEnabled);
+      const isLmStudio = wosQueryProviderSelect.value === 'lmstudio';
+      if (wosQueryProviderDetails) {
+        wosQueryProviderDetails.style.display = isEnabled ? 'block' : 'none';
+      }
+      openaiApiSettingsSection.style.display = isLmStudio ? 'none' : 'flex';
+      openaiModelSettingsSection.style.display = isLmStudio ? 'none' : 'flex';
+      lmStudioSettingsSection.style.display = isLmStudio ? 'flex' : 'none';
+      if (!isEnabled) {
+        openaiApiSettingsSection.style.display = 'none';
+        openaiModelSettingsSection.style.display = 'none';
+        lmStudioSettingsSection.style.display = 'none';
+      }
+      currentWosQueryProvider = wosQueryProviderSelect.value || 'openai';
+      updateWosQueryAccessHint();
+    };
+
+    const saveWosQueryProvider = (provider) => {
+      currentWosQueryProvider = provider || 'openai';
+      chrome.storage.local.set({ [WOS_QUERY_PROVIDER_STORAGE_KEY]: currentWosQueryProvider }, () => {
+        if (chrome.runtime.lastError) {
+          updateWosQueryProviderHint('Failed to save provider.', 'status--error');
+          setStatus(sidDisplay, 'Failed to save WOS provider', 'status--error');
+          return;
+        }
+        updateProviderVisibility();
+        syncWosQueryAccessToActiveTab();
+        setStatus(sidDisplay, `WOS Query provider: ${currentWosQueryProvider === 'lmstudio' ? 'LM Studio' : 'OpenAI'}`, 'status--success');
+      });
+    };
+
+    const saveWosQueryEnabled = (enabled) => {
+      currentWosQueryEnabled = Boolean(enabled);
+      chrome.storage.local.set({ [WOS_QUERY_ENABLED_STORAGE_KEY]: currentWosQueryEnabled }, () => {
+        if (chrome.runtime.lastError) {
+          updateWosQueryProviderHint('Failed to save WOS Query enabled state.', 'status--error');
+          setStatus(sidDisplay, 'Failed to save WOS Query state', 'status--error');
+          return;
+        }
+        if (wosQueryProviderEnabledToggle) {
+          wosQueryProviderEnabledToggle.checked = currentWosQueryEnabled;
+        }
+        updateProviderVisibility();
+        updateWosQueryAccessHint();
+        syncWosQueryAccessToActiveTab();
+        setStatus(sidDisplay, currentWosQueryEnabled ? 'WOS Query enabled' : 'WOS Query disabled', currentWosQueryEnabled ? 'status--success' : 'status--muted');
+      });
+    };
+
+    const saveLmStudioSettings = () => {
+      const baseUrl = (lmStudioBaseUrlInput?.value || '').trim() || 'http://127.0.0.1:1234/v1';
+      const model = (lmStudioModelInput?.value || '').trim();
+      const apiKey = (lmStudioApiKeyInput?.value || '').trim();
+
+      chrome.storage.local.set({
+        [LM_STUDIO_BASE_URL_STORAGE_KEY]: baseUrl,
+        [LM_STUDIO_MODEL_STORAGE_KEY]: model,
+        [LM_STUDIO_API_KEY_STORAGE_KEY]: apiKey
+      }, () => {
+        if (chrome.runtime.lastError) {
+          updateLmStudioHint('Failed to save LM Studio settings.', 'status--error');
+          setStatus(sidDisplay, 'Failed to save LM Studio settings', 'status--error');
+          return;
+        }
+        if (lmStudioBaseUrlInput) lmStudioBaseUrlInput.value = baseUrl;
+        setProviderVerifiedState('lmstudio', false);
+        updateLmStudioHint('LM Studio settings saved. Test again to enable WOS Query.', 'status--info');
+        setStatus(sidDisplay, 'LM Studio settings saved, verification reset', 'status--info');
+      });
+    };
+
+    const testLmStudioSettings = async () => {
+      const baseUrl = ((lmStudioBaseUrlInput?.value || '').trim() || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
+      const model = (lmStudioModelInput?.value || '').trim();
+      const apiKey = (lmStudioApiKeyInput?.value || '').trim();
+
+      if (!model) {
+        updateLmStudioHint('Enter an LM Studio model id first.', 'status--error');
+        setStatus(sidDisplay, 'LM Studio model missing', 'status--error');
+        return false;
+      }
+
+      updateLmStudioHint('Testing LM Studio...', 'status--info');
+      setStatus(sidDisplay, 'Testing LM Studio...', 'status--info');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (apiKey) {
+          headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+        const response = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: 'Say OK.' }],
+            temperature: 0,
+            max_tokens: 16
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          setProviderVerifiedState('lmstudio', false);
+          updateLmStudioHint('LM Studio test failed. Check URL or model.', 'status--error');
+          setStatus(sidDisplay, `LM Studio test failed: ${response.status}`, 'status--error');
+          console.error('LM Studio test failed:', errorText);
+          return false;
+        }
+
+        setProviderVerifiedState('lmstudio', true);
+        updateLmStudioHint('LM Studio connection succeeded.', 'status--success');
+        setStatus(sidDisplay, 'LM Studio test succeeded', 'status--success');
+        return true;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        const message = error.name === 'AbortError' ? 'LM Studio test timed out.' : 'LM Studio test failed.';
+        setProviderVerifiedState('lmstudio', false);
+        updateLmStudioHint(message, 'status--error');
+        setStatus(sidDisplay, message, 'status--error');
+        return false;
+      }
+    };
+
     const saveChatModel = (model) => {
       chrome.storage.local.set({ [CHAT_MODEL_STORAGE_KEY]: model }, () => {
         if (chrome.runtime.lastError) {
@@ -446,8 +685,9 @@ import './popup.css';
           setStatus(sidDisplay, 'Failed to save model', 'status--error');
           return;
         }
-        updateChatModelHint('Model saved for all pages.', 'status--success');
-        setStatus(sidDisplay, 'Chat model saved', 'status--success');
+        setProviderVerifiedState('openai', false);
+        updateChatModelHint('Model saved. Test again to enable WOS Query.', 'status--info');
+        setStatus(sidDisplay, 'Chat model saved, verification reset', 'status--info');
       });
     };
 
@@ -492,6 +732,75 @@ import './popup.css';
           return;
         }
         saveChatModel(model);
+      });
+    }
+
+    if (wosQueryProviderSelect) {
+      chrome.storage.local.get([
+        WOS_QUERY_PROVIDER_STORAGE_KEY,
+        WOS_QUERY_ENABLED_STORAGE_KEY,
+        WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY,
+        WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY
+      ], result => {
+        currentWosQueryProvider = result[WOS_QUERY_PROVIDER_STORAGE_KEY] || 'openai';
+        currentWosQueryEnabled = Boolean(result[WOS_QUERY_ENABLED_STORAGE_KEY]);
+        currentOpenAIVerified = Boolean(result[WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY]);
+        currentLmStudioVerified = Boolean(result[WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY]);
+        wosQueryProviderSelect.value = currentWosQueryProvider;
+        if (wosQueryProviderEnabledToggle) {
+          wosQueryProviderEnabledToggle.checked = currentWosQueryEnabled;
+        }
+        updateProviderVisibility();
+      });
+      wosQueryProviderSelect.addEventListener('change', () => {
+        saveWosQueryProvider(wosQueryProviderSelect.value);
+      });
+    }
+
+    if (wosQueryProviderEnabledToggle) {
+      wosQueryProviderEnabledToggle.addEventListener('change', () => {
+        saveWosQueryEnabled(wosQueryProviderEnabledToggle.checked);
+      });
+    }
+
+    if (lmStudioBaseUrlInput) {
+      chrome.storage.local.get([LM_STUDIO_BASE_URL_STORAGE_KEY, LM_STUDIO_MODEL_STORAGE_KEY, LM_STUDIO_API_KEY_STORAGE_KEY], result => {
+        lmStudioBaseUrlInput.value = result[LM_STUDIO_BASE_URL_STORAGE_KEY] || 'http://127.0.0.1:1234/v1';
+        if (lmStudioModelInput) {
+          lmStudioModelInput.value = result[LM_STUDIO_MODEL_STORAGE_KEY] || '';
+        }
+        if (lmStudioApiKeyInput) {
+          lmStudioApiKeyInput.value = result[LM_STUDIO_API_KEY_STORAGE_KEY] || '';
+        }
+        updateLmStudioHint('Used only when provider is set to LM Studio.', 'status--muted');
+      });
+
+      lmStudioBaseUrlInput.addEventListener('blur', saveLmStudioSettings);
+      lmStudioBaseUrlInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          saveLmStudioSettings();
+        }
+      });
+    }
+
+    if (lmStudioModelInput) {
+      lmStudioModelInput.addEventListener('blur', saveLmStudioSettings);
+      lmStudioModelInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          saveLmStudioSettings();
+        }
+      });
+    }
+
+    if (lmStudioApiKeyInput) {
+      lmStudioApiKeyInput.addEventListener('blur', saveLmStudioSettings);
+      lmStudioApiKeyInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          saveLmStudioSettings();
+        }
       });
     }
 
@@ -553,17 +862,20 @@ import './popup.css';
 
             if (!response.ok) {
               const errorText = await response.text();
+              setProviderVerifiedState('openai', false);
               updateChatModelHint('Test failed. Check model or key.', 'status--error');
               setStatus(sidDisplay, `Test failed: ${response.status}`, 'status--error');
               console.error('Model test failed:', errorText);
               return;
             }
 
+            setProviderVerifiedState('openai', true);
             updateChatModelHint('Test succeeded.', 'status--success');
             setStatus(sidDisplay, 'Model test succeeded', 'status--success');
           } catch (error) {
             clearTimeout(timeoutId);
             const message = error.name === 'AbortError' ? 'Test timed out.' : 'Test failed.';
+            setProviderVerifiedState('openai', false);
             updateChatModelHint(message, 'status--error');
             setStatus(sidDisplay, message, 'status--error');
           }
@@ -629,45 +941,35 @@ import './popup.css';
       });
     }
 
-
-    openEasyScholarBtn.addEventListener('click', () => {
-      chrome.storage.local.get([EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY], result => {
-        if (!result[EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY]) {
-          updateEasyScholarApiKeyHint('Verify the EasyScholar API key before opening Journal Query.', 'status--error');
-          setStatus(sidDisplay, 'EasyScholar key not verified', 'status--error');
-          return;
-        }
-
-        isEasyScholarEnabled = !isEasyScholarEnabled;
-        setEasyScholarToggle(openEasyScholarBtn, isEasyScholarEnabled);
-
-        withActiveTab((tab) => {
-          if (!tab) {
-            setStatus(sidDisplay, 'No active tab detected', 'status--error');
-            return;
-          }
-          chrome.tabs.sendMessage(
-            tab.id,
-            { type: isEasyScholarEnabled ? 'OPEN_EASYSCHOLAR' : 'CLOSE_EASYSCHOLAR', preferredTab: 'journal' },
-            response => {
-              if (chrome.runtime.lastError) {
-                setStatus(sidDisplay, 'Error: ' + chrome.runtime.lastError.message, 'status--error');
-                return;
-              }
-              if (response && response.success) {
-                setStatus(
-                  sidDisplay,
-                  isEasyScholarEnabled ? 'EasyScholar enabled' : 'EasyScholar disabled',
-                  'status--success'
-                );
-              } else {
-                setStatus(sidDisplay, 'Failed to toggle EasyScholar', 'status--error');
-              }
-            }
-          );
-        });
+    if (easyScholarWebsiteBtn) {
+      easyScholarWebsiteBtn.addEventListener('click', () => {
+        chrome.tabs.create({ url: 'https://www.easyscholar.cc/' });
       });
-    });
+    }
+
+    if (lmStudioApiKeyToggle && lmStudioApiKeyInput) {
+      lmStudioApiKeyToggle.addEventListener('click', () => {
+        const isHidden = lmStudioApiKeyInput.type === 'password';
+        lmStudioApiKeyInput.type = isHidden ? 'text' : 'password';
+        const icon = lmStudioApiKeyToggle.querySelector('i');
+        if (icon) {
+          icon.className = isHidden ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+        }
+      });
+    }
+
+    if (lmStudioSaveBtn) {
+      lmStudioSaveBtn.addEventListener('click', () => {
+        saveLmStudioSettings();
+      });
+    }
+
+    if (lmStudioTestBtn) {
+      lmStudioTestBtn.addEventListener('click', async () => {
+        await testLmStudioSettings();
+      });
+    }
+
 
     openWosDoiQueryBtn.addEventListener('click', () => {
       isWosDoiQueryEnabled = !isWosDoiQueryEnabled;

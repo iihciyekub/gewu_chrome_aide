@@ -146,6 +146,7 @@ async function getPublicationRank(SO) {
  */
 (async function () {
     try {
+    const PANEL_FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     const requestStorage = (action, key, value) => new Promise((resolve) => {
         const requestId = `gewuaide-easyscholar-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const handler = (event) => {
@@ -202,11 +203,30 @@ async function getPublicationRank(SO) {
         style.textContent = `
 #wos_easyscholar_panel {
     color: #1f2937;
+    font-family: ${PANEL_FONT_STACK} !important;
+    font-size: 14px !important;
+}
+#wos_easyscholar_panel button,
+#wos_easyscholar_panel input,
+#wos_easyscholar_panel textarea,
+#wos_easyscholar_panel select,
+#wos_easyscholar_panel div,
+#wos_easyscholar_panel span,
+#wos_easyscholar_panel label {
+    font-family: ${PANEL_FONT_STACK} !important;
+    font-size: 14px !important;
 }
 #wos_easyscholar_panel table,
 #wos_easyscholar_panel th,
 #wos_easyscholar_panel td {
+    font-family: ${PANEL_FONT_STACK} !important;
     font-size: 14px !important;
+}
+#wos_easyscholar_panel i,
+#wos_easyscholar_panel .fa-solid,
+#wos_easyscholar_panel .fa-regular,
+#wos_easyscholar_panel .fa-brands {
+    font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands" !important;
 }
 #wos_easyscholar_panel input::placeholder {
     color: #7b8794;
@@ -257,7 +277,8 @@ async function getPublicationRank(SO) {
     box.style.left = `${Math.round(left)}px`;
     box.style.right = "auto";
     box.style.zIndex = "999999";
-    box.style.fontFamily = window.ENLIGHTENKEY_FONT_FAMILY || '"Segoe UI", "Helvetica Neue", Arial, "Microsoft YaHei", "PingFang SC", sans-serif';
+    box.style.fontFamily = PANEL_FONT_STACK;
+    box.style.fontSize = "14px";
     box.style.background = "#ffffff";
     box.style.padding = "0";
     box.style.borderRadius = "4px";
@@ -313,20 +334,6 @@ async function getPublicationRank(SO) {
     btnGroup.style.gap = "4px";
     btnGroup.style.flexShrink = "0";
 
-    const settingsBtn = document.createElement("button");
-    settingsBtn.innerHTML = '<i class="fa-solid fa-key"></i>';
-    settingsBtn.style.background = "transparent";
-    settingsBtn.style.border = "1px solid rgba(255,255,255,0.20)";
-    settingsBtn.style.color = "#fff";
-    settingsBtn.style.borderRadius = "4px";
-    settingsBtn.style.cursor = "pointer";
-    settingsBtn.style.display = "inline-flex";
-    settingsBtn.style.alignItems = "center";
-    settingsBtn.style.justifyContent = "center";
-    settingsBtn.style.padding = "2px 6px";
-    settingsBtn.style.fontSize = "11px";
-    settingsBtn.title = "Set API Key (Hide/Show)";
-
     const websiteBtn = document.createElement("button");
     websiteBtn.innerHTML = '<i class="fa-solid fa-globe"></i>';
     websiteBtn.style.background = "transparent";
@@ -360,7 +367,6 @@ async function getPublicationRank(SO) {
     closeBtn.title = "Close Panel";
     // closeBtn.onclick 将在清理函数定义后设置
 
-    btnGroup.appendChild(settingsBtn);
     btnGroup.appendChild(websiteBtn);
     btnGroup.appendChild(closeBtn);
 
@@ -485,15 +491,6 @@ async function getPublicationRank(SO) {
 
     row1.appendChild(apiLabel);
     row1.appendChild(apiInput);
-    row1.style.display = savedSettingsVisible === "false" ? "none" : "flex";
-
-    // Settings button toggle
-    settingsBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const isVisible = row1.style.display !== "none";
-        row1.style.display = isVisible ? "none" : "flex";
-        localStorage.setItem(SETTINGS_VISIBLE_KEY, String(!isVisible));
-    });
 
     // Row 2: Journal name input
     const row2 = document.createElement("div");
@@ -549,23 +546,11 @@ async function getPublicationRank(SO) {
             return true;
         }
         console.warn("EasyScholar API key is not configured");
-        row1.style.display = "flex";
-        localStorage.setItem(SETTINGS_VISIBLE_KEY, "true");
-        setStatus("Please set EasyScholar API Key first", "#D32F2F");
-        apiInput.value = "";
-        setTimeout(() => {
-            try {
-                apiInput.focus({ preventScroll: true });
-            } catch (error) {
-                apiInput.focus();
-            }
-        }, 0);
+        setStatus("Please set EasyScholar API Key in popup settings first", "#D32F2F");
         return false;
     }
 
     function hideApiKeyRow() {
-        row1.style.display = "none";
-        localStorage.setItem(SETTINGS_VISIBLE_KEY, "false");
         if (!isApiFocused) {
             apiInput.value = maskApiKey(actualApiKey);
         }
@@ -1031,7 +1016,6 @@ async function getPublicationRank(SO) {
         }
     });
 
-    contentBox.appendChild(row1);
     contentBox.appendChild(row2);
     contentBox.appendChild(row3);
 

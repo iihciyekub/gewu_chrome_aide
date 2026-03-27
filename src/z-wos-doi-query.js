@@ -30,6 +30,36 @@ window.wosids = [];
     // ========== 导出目录选择（与 popup 共用） ==========
     let exportDirHandle = null;
     let exportDirName = '';
+    const PANEL_FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+    const styleId = 'clipboard-reader-box-style';
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+#clipboard-reader-box,
+#clipboard-reader-box button,
+#clipboard-reader-box input,
+#clipboard-reader-box textarea,
+#clipboard-reader-box select,
+#clipboard-reader-box div,
+#clipboard-reader-box span,
+#clipboard-reader-box label,
+#clipboard-reader-box table,
+#clipboard-reader-box th,
+#clipboard-reader-box td {
+    font-family: ${PANEL_FONT_STACK} !important;
+    font-size: 14px !important;
+}
+#clipboard-reader-box i,
+#clipboard-reader-box .fa-solid,
+#clipboard-reader-box .fa-regular,
+#clipboard-reader-box .fa-brands {
+    font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands" !important;
+}
+`;
+        (document.head || document.documentElement).appendChild(style);
+    }
 
     const openProjectHandleStore = async () => new Promise((resolve, reject) => {
         const request = indexedDB.open('gewuaide-toolkit', 1);
@@ -156,6 +186,16 @@ window.wosids = [];
     const HISTORY_KEY = "clipboard-reader-box-history";
     const EASYSCHOLAR_VERIFIED_KEY = "wos-easyscholar-api-key-verified";
     const EASYSCHOLAR_SYNC_EVENT = "__EASYSCHOLAR_API_KEY_SYNC__";
+    const CHAT_API_KEY_STORAGE_KEY = "wosOpenaiApiKey";
+    const CHAT_MODEL_STORAGE_KEY = "wosOpenaiChatModel";
+    const WOS_QUERY_PROVIDER_STORAGE_KEY = "wosQueryProvider";
+    const WOS_QUERY_ENABLED_KEY = "wosQueryEnabled";
+    const WOS_QUERY_OPENAI_VERIFIED_KEY = "wosOpenaiVerified";
+    const WOS_QUERY_LMSTUDIO_VERIFIED_KEY = "wosLmStudioVerified";
+    const WOS_QUERY_ACCESS_SYNC_EVENT = "__WOS_QUERY_ACCESS_SYNC__";
+    const LM_STUDIO_BASE_URL_STORAGE_KEY = "wosLmStudioBaseUrl";
+    const LM_STUDIO_MODEL_STORAGE_KEY = "wosLmStudioModel";
+    const LM_STUDIO_API_KEY_STORAGE_KEY = "wosLmStudioApiKey";
     const MAX_HISTORY = 20;
     const savedTop = readStorage(POSITION_TOP_KEY, "80px");
     const savedLeft = readStorage(POSITION_LEFT_KEY, null);
@@ -241,7 +281,8 @@ window.wosids = [];
     box.style.left = `${Math.round(left)}px`;
     box.style.right = "auto";
     box.style.zIndex = "999999";
-    box.style.fontFamily = window.ENLIGHTENKEY_FONT_FAMILY || '"Segoe UI", "Helvetica Neue", Arial, "Microsoft YaHei", "PingFang SC", sans-serif';
+    box.style.fontFamily = PANEL_FONT_STACK;
+    box.style.fontSize = '14px';
     box.style.background = "#ffffff";
     box.style.padding = "0";
     box.style.borderRadius = "4px";
@@ -275,6 +316,43 @@ window.wosids = [];
     title.style.fontWeight = "bold";
     title.style.cursor = "move";
 
+    const titleBtnGroup = document.createElement("div");
+    titleBtnGroup.style.display = "flex";
+    titleBtnGroup.style.alignItems = "center";
+    titleBtnGroup.style.gap = "4px";
+
+    const copySidBtn = document.createElement("button");
+    copySidBtn.innerHTML = `<i class="fa-solid fa-copy"></i><span style="margin-left:4px;">SID</span>`;
+    copySidBtn.style.background = "transparent";
+    copySidBtn.style.border = "1px solid rgba(255,255,255,0.20)";
+    copySidBtn.style.color = "#fff";
+    copySidBtn.style.fontSize = "11px";
+    copySidBtn.style.cursor = "pointer";
+    copySidBtn.style.padding = "2px 6px";
+    copySidBtn.style.borderRadius = "4px";
+    copySidBtn.style.display = "inline-flex";
+    copySidBtn.style.alignItems = "center";
+    copySidBtn.style.justifyContent = "center";
+    copySidBtn.title = "Copy SID";
+
+    copySidBtn.onclick = async () => {
+        const sid = String(window?.wos?.SID || window?.sessionData?.BasicProperties?.SID || '').trim();
+        if (!sid) {
+            alert('SID not found on current page.');
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(sid);
+            const oldHtml = copySidBtn.innerHTML;
+            copySidBtn.innerHTML = `<i class="fa-solid fa-check"></i><span style="margin-left:4px;">SID</span>`;
+            setTimeout(() => {
+                copySidBtn.innerHTML = oldHtml;
+            }, 1200);
+        } catch (error) {
+            alert('Failed to copy SID.');
+        }
+    };
 
     // 关闭按钮
     const closeBtn = document.createElement("button");
@@ -290,7 +368,9 @@ window.wosids = [];
     // onclick 将在后面定义
 
     controlRow.appendChild(title);
-    controlRow.appendChild(closeBtn);
+    titleBtnGroup.appendChild(copySidBtn);
+    titleBtnGroup.appendChild(closeBtn);
+    controlRow.appendChild(titleBtnGroup);
     box.appendChild(controlRow);
 
     // Tab 容器
@@ -435,6 +515,10 @@ window.wosids = [];
         builderTabBtn.style.background = isBuilder ? '#174b78' : '#ffffff';
         builderTabBtn.style.color = isBuilder ? '#ffffff' : '#1f5a92';
         builderTabBtn.style.borderColor = isBuilder ? '#123a5c' : '#c8d5e2';
+
+        if (isExport && typeof refreshExportUuidInfo === 'function') {
+            refreshExportUuidInfo();
+        }
     };
 
     queryTabBtn.onclick = () => setActiveTab('query');
@@ -443,25 +527,31 @@ window.wosids = [];
     builderTabBtn.onclick = () => setActiveTab('builder');
     setActiveTab('query');
 
-    const journalAccessHint = document.createElement('div');
-    journalAccessHint.textContent = 'Journal Query is locked until the EasyScholar API key passes verification in popup settings.';
-    journalAccessHint.style.display = 'none';
-    journalAccessHint.style.padding = '6px 8px';
-    journalAccessHint.style.border = '1px solid #e2d1c7';
-    journalAccessHint.style.borderRadius = '2px';
-    journalAccessHint.style.background = '#fbf5f1';
-    journalAccessHint.style.color = '#8a4b3c';
-    journalAccessHint.style.fontSize = '11px';
-    journalAccessHint.style.lineHeight = '1.4';
-    tabContentWrap.insertBefore(journalAccessHint, queryTabPanel);
-
     const applyJournalAccess = (verified) => {
         const isVerified = Boolean(verified);
         journalTabBtn.style.display = isVerified ? 'block' : 'none';
-        journalAccessHint.style.display = isVerified ? 'none' : 'block';
         if (!isVerified && journalTabPanel.style.display !== 'none') {
             setActiveTab('query');
         }
+    };
+
+    const applyWosQueryAccess = ({ enabled = false, verified = false } = {}) => {
+        const isAllowed = Boolean(enabled) && Boolean(verified);
+        builderTabBtn.style.display = isAllowed ? 'block' : 'none';
+        if (!isAllowed && builderTabPanel.style.display !== 'none') {
+            setActiveTab('query');
+        }
+    };
+
+    const refreshWosQueryAccess = async () => {
+        const provider = (await requestStorage("get", WOS_QUERY_PROVIDER_STORAGE_KEY)) || 'openai';
+        const enabledValue = await requestStorage("get", WOS_QUERY_ENABLED_KEY);
+        const verifiedKey = provider === 'lmstudio' ? WOS_QUERY_LMSTUDIO_VERIFIED_KEY : WOS_QUERY_OPENAI_VERIFIED_KEY;
+        const verifiedValue = await requestStorage("get", verifiedKey);
+        applyWosQueryAccess({
+            enabled: enabledValue === true || enabledValue === "true",
+            verified: verifiedValue === true || verifiedValue === "true"
+        });
     };
 
     const mountEasyScholarPanel = () => {
@@ -509,15 +599,27 @@ window.wosids = [];
             }
             ensureEasyScholarMounted();
         }
+        if (tabName === 'builder' && builderTabBtn.style.display === 'none') {
+            setActiveTab('query');
+            return;
+        }
         setActiveTab(tabName);
     });
 
     requestStorage("get", EASYSCHOLAR_VERIFIED_KEY).then((value) => {
         applyJournalAccess(value === true || value === "true");
     });
+    refreshWosQueryAccess();
 
     document.addEventListener(EASYSCHOLAR_SYNC_EVENT, (event) => {
         applyJournalAccess(Boolean(event?.detail?.verified));
+    });
+
+    document.addEventListener(WOS_QUERY_ACCESS_SYNC_EVENT, (event) => {
+        applyWosQueryAccess({
+            enabled: Boolean(event?.detail?.enabled),
+            verified: Boolean(event?.detail?.verified)
+        });
     });
 
     ensureEasyScholarMounted();
@@ -742,6 +844,97 @@ window.wosids = [];
     exportFlowGroup.appendChild(exportFlowTitle);
     exportFlowGroup.appendChild(exportFlowHint);
 
+    const exportUuidInfo = document.createElement('div');
+    exportUuidInfo.style.padding = '5px 7px';
+    exportUuidInfo.style.background = '#f7f9fb';
+    exportUuidInfo.style.border = '1px solid #d0d9e3';
+    exportUuidInfo.style.borderRadius = '2px';
+    exportUuidInfo.style.color = '#243b53';
+    exportUuidInfo.style.fontSize = '10px';
+    exportUuidInfo.style.lineHeight = '1.4';
+    exportUuidInfo.textContent = 'Current UUID: Loading...';
+    exportFlowGroup.appendChild(exportUuidInfo);
+
+    const exportUuidJumpWrap = document.createElement('div');
+    exportUuidJumpWrap.style.display = 'none';
+    exportUuidJumpWrap.style.flexDirection = 'column';
+    exportUuidJumpWrap.style.gap = '6px';
+    exportUuidJumpWrap.style.padding = '6px 0 0';
+
+    const exportUuidJumpHint = document.createElement('div');
+    exportUuidJumpHint.textContent = 'Current page has no UUID. Enter a UUID to open its result page first.';
+    exportUuidJumpHint.style.color = '#6b7c93';
+    exportUuidJumpHint.style.fontSize = '10px';
+    exportUuidJumpHint.style.lineHeight = '1.4';
+
+    const exportUuidInput = document.createElement('input');
+    exportUuidInput.type = 'text';
+    exportUuidInput.placeholder = 'Enter UUID';
+    exportUuidInput.style.width = '100%';
+    exportUuidInput.style.height = '24px';
+    exportUuidInput.style.padding = '4px 8px';
+    exportUuidInput.style.boxSizing = 'border-box';
+    exportUuidInput.style.border = '1px solid #d0d9e3';
+    exportUuidInput.style.borderRadius = '2px';
+    exportUuidInput.style.fontSize = '11px';
+    exportUuidInput.style.fontFamily = "Consolas, 'Courier New', monospace";
+    exportUuidInput.style.outline = 'none';
+
+    const openUuidPageBtn = document.createElement('button');
+    openUuidPageBtn.textContent = 'Open UUID Page';
+    openUuidPageBtn.style.display = 'block';
+    openUuidPageBtn.style.width = '100%';
+    openUuidPageBtn.style.padding = '4px 8px';
+    openUuidPageBtn.style.height = '24px';
+    openUuidPageBtn.style.background = '#174b78';
+    openUuidPageBtn.style.color = '#fff';
+    openUuidPageBtn.style.border = '1px solid #123a5c';
+    openUuidPageBtn.style.borderRadius = '2px';
+    openUuidPageBtn.style.fontSize = '11px';
+    openUuidPageBtn.style.cursor = 'pointer';
+    openUuidPageBtn.style.boxShadow = 'none';
+
+    exportUuidJumpWrap.appendChild(exportUuidJumpHint);
+    exportUuidJumpWrap.appendChild(exportUuidInput);
+    exportUuidJumpWrap.appendChild(openUuidPageBtn);
+    exportFlowGroup.appendChild(exportUuidJumpWrap);
+
+    let currentExportUuid = '';
+    const syncExportUuidMode = (uuid = '') => {
+        currentExportUuid = String(uuid || '').trim();
+        const hasUuid = Boolean(currentExportUuid);
+        selectExportDirBtn.style.display = hasUuid ? 'block' : 'none';
+        exportBtn.style.display = hasUuid ? 'block' : 'none';
+        exportUuidJumpWrap.style.display = hasUuid ? 'none' : 'flex';
+        exportFlowHint.style.display = hasUuid ? 'block' : 'none';
+    };
+
+    const UUID_URL_PATTERN = /[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}-[A-Fa-f0-9]{10}/;
+
+    const extractUuidFromCurrentUrl = () => {
+        const href = String(window.location.href || '');
+        const match = href.match(UUID_URL_PATTERN);
+        return match ? match[0] : '';
+    };
+
+    const isValidUuid = (value = '') => UUID_URL_PATTERN.test(String(value || '').trim());
+
+    const refreshExportUuidInfo = () => {
+        const uuid = extractUuidFromCurrentUrl();
+
+        if (!uuid) {
+            exportUuidInfo.textContent = 'Current URL: No UUID detected';
+            exportUuidInfo.style.color = '#7b8794';
+            syncExportUuidMode('');
+            return '';
+        }
+
+        exportUuidInfo.textContent = `Current UUID: ${uuid}`;
+        exportUuidInfo.style.color = '#243b53';
+        syncExportUuidMode(uuid);
+        return uuid;
+    };
+
     const selectExportDirBtn = document.createElement('button');
     selectExportDirBtn.textContent = 'Step 1: Select Export Directory';
     selectExportDirBtn.style.display = 'block';
@@ -816,6 +1009,45 @@ window.wosids = [];
         }
     };
 
+    openUuidPageBtn.onclick = async () => {
+        const uuid = String(exportUuidInput.value || '').trim();
+        if (!uuid) {
+            alert('Please enter a UUID first.');
+            return;
+        }
+
+        if (!isValidUuid(uuid)) {
+            alert('Invalid UUID format.');
+            return;
+        }
+
+        const oldText = openUuidPageBtn.textContent;
+        openUuidPageBtn.textContent = 'Opening...';
+        openUuidPageBtn.disabled = true;
+
+        try {
+            if (window.wos && window.wos.uuid && typeof window.wos.uuid.open === 'function') {
+                await window.wos.uuid.open(uuid);
+                exportUuidInput.value = uuid;
+                refreshExportUuidInfo();
+            } else {
+                throw new Error('window.wos.uuid.open is unavailable');
+            }
+        } catch (error) {
+            alert(error && error.message ? error.message : 'Failed to open UUID page.');
+        } finally {
+            openUuidPageBtn.textContent = oldText;
+            openUuidPageBtn.disabled = false;
+        }
+    };
+
+    exportUuidInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            openUuidPageBtn.click();
+        }
+    });
+
     // 尝试从 popup 写入的 handle 恢复目录
     loadStoredProjectHandle().then((handle) => {
         if (!handle) return;
@@ -887,6 +1119,20 @@ window.wosids = [];
     };
 
     exportBtn.onclick = async () => {
+        refreshExportUuidInfo();
+
+        if (!currentExportUuid) {
+            renderExportProgress({
+                visible: true,
+                statusText: 'Please open a UUID page first',
+                detailText: 'Enter a UUID above and jump to its result page',
+                completed: 0,
+                total: 0,
+                isError: true
+            });
+            return;
+        }
+
         if (!exportDirHandle) {
             renderExportProgress({
                 visible: true,
@@ -1008,6 +1254,7 @@ window.wosids = [];
     };
 
     syncExportFlowState();
+    refreshExportUuidInfo();
 
 
     // 添加 Async Enlightenkey DOIList 按钮
@@ -1103,45 +1350,53 @@ window.wosids = [];
     exportFlowGroup.appendChild(exportProgressWrap);
     exportTabPanel.appendChild(exportFlowGroup);
 
-    // WOS Query 标题
-    const queryTitle = document.createElement('div');
-    queryTitle.textContent = 'WOS Query Builder';
-    queryTitle.style.color = '#274c6b';
-    queryTitle.style.fontSize = '11px';
-    queryTitle.style.fontWeight = '600';
-    queryTitle.style.marginBottom = '2px';
-    builderTabPanel.appendChild(queryTitle);
-
-    // WOS Query 输入和按钮行
+    // WOS Query 输入区
     const wosQueryRow = document.createElement('div');
     wosQueryRow.style.display = 'flex';
-    wosQueryRow.style.gap = '4px';
-    wosQueryRow.style.alignItems = 'stretch';
+    wosQueryRow.style.flexDirection = 'column';
+    wosQueryRow.style.gap = '8px';
+    wosQueryRow.style.padding = '10px';
+    wosQueryRow.style.border = '1px solid #d7dfe8';
+    wosQueryRow.style.borderRadius = '14px';
+    wosQueryRow.style.background = '#ffffff';
+    wosQueryRow.style.boxShadow = '0 1px 3px rgba(15, 23, 42, 0.04)';
 
     // WOS Query 输入框
-    const wosQueryInput = document.createElement('input');
-    wosQueryInput.type = 'text';
-    wosQueryInput.placeholder = 'Enter natural language query...';
-    wosQueryInput.style.flex = '1';
-    wosQueryInput.style.padding = '0 8px';
-    wosQueryInput.style.height = '24px';
-    wosQueryInput.style.border = '1px solid #e4ebf1';
-    wosQueryInput.style.borderRadius = '2px';
+    const wosQueryInput = document.createElement('textarea');
+    wosQueryInput.placeholder = 'Describe the WOS query you want to build...';
+    wosQueryInput.rows = 4;
+    wosQueryInput.style.width = '100%';
+    wosQueryInput.style.minHeight = '110px';
+    wosQueryInput.style.padding = '0';
+    wosQueryInput.style.border = 'none';
+    wosQueryInput.style.borderRadius = '0';
     wosQueryInput.style.outline = 'none';
-    wosQueryInput.style.fontSize = '11px';
+    wosQueryInput.style.resize = 'vertical';
     wosQueryInput.style.background = '#ffffff';
+    wosQueryInput.style.lineHeight = '1.5';
+    wosQueryInput.style.boxSizing = 'border-box';
+
+    const wosQueryActions = document.createElement('div');
+    wosQueryActions.style.display = 'flex';
+    wosQueryActions.style.alignItems = 'center';
+    wosQueryActions.style.justifyContent = 'space-between';
+    wosQueryActions.style.gap = '8px';
+
+    const wosQueryHint = document.createElement('div');
+    wosQueryHint.textContent = 'Enter for newline, Ctrl/Cmd+Enter to send';
+    wosQueryHint.style.color = '#6b7c93';
+    wosQueryHint.style.lineHeight = '1.4';
 
     // WOS Query 提交按钮
     const wosQueryBtn = document.createElement('button');
     wosQueryBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>';
-    wosQueryBtn.style.padding = '3px 10px';
-    wosQueryBtn.style.height = '24px';
+    wosQueryBtn.style.width = '40px';
+    wosQueryBtn.style.height = '40px';
     wosQueryBtn.style.background = '#174b78';
     wosQueryBtn.style.color = '#fff';
     wosQueryBtn.style.border = '1px solid #123a5c';
-    wosQueryBtn.style.borderRadius = '2px';
+    wosQueryBtn.style.borderRadius = '999px';
     wosQueryBtn.style.cursor = 'pointer';
-    wosQueryBtn.style.fontSize = '11px';
     wosQueryBtn.style.outline = 'none';
     wosQueryBtn.style.whiteSpace = 'nowrap';
     wosQueryBtn.style.display = 'flex';
@@ -1149,35 +1404,7 @@ window.wosids = [];
     wosQueryBtn.style.justifyContent = 'center';
     wosQueryBtn.title = 'Build and execute WOS query';
 
-    const CHAT_API_KEY_REQUEST_EVENT = "__ENLIGHTENKEY_CHAT_API_KEY_REQUEST__";
-    const CHAT_API_KEY_RESPONSE_EVENT = "__ENLIGHTENKEY_CHAT_API_KEY_RESPONSE__";
     const PROMPT_CACHE = new Map();
-
-    const requestApiKeyFromChromeStorage = () => new Promise((resolve) => {
-        const requestId = `wos-api-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        let settled = false;
-
-        const handler = (event) => {
-            if (!event?.detail || event.detail.requestId !== requestId) {
-                return;
-            }
-            settled = true;
-            document.removeEventListener(CHAT_API_KEY_RESPONSE_EVENT, handler);
-            resolve(event.detail.apiKey || "");
-        };
-
-        document.addEventListener(CHAT_API_KEY_RESPONSE_EVENT, handler);
-        document.dispatchEvent(new CustomEvent(CHAT_API_KEY_REQUEST_EVENT, {
-            detail: { requestId }
-        }));
-
-        setTimeout(() => {
-            if (!settled) {
-                document.removeEventListener(CHAT_API_KEY_RESPONSE_EVENT, handler);
-                resolve("");
-            }
-        }, 1200);
-    });
 
     const resolveExtensionBaseUrl = () => {
         try {
@@ -1220,10 +1447,10 @@ window.wosids = [];
         return text;
     };
 
-    const buildWosQueryPayload = async (text) => {
+    const buildOpenAIWosQueryPayload = async (text, model) => {
         const systemPrompt = await loadPrompt();
         return {
-            'model': 'gpt-4.1-mini',
+            'model': model || 'gpt-4o-mini',
             'input': [
                 {
                     'role': 'system',
@@ -1273,19 +1500,27 @@ window.wosids = [];
         return response.json();
     };
 
-    const runWosQueryFallback = async (text) => {
-        let apiKey = window.openai_api_key || '';
-        if (!apiKey) {
-            apiKey = await requestApiKeyFromChromeStorage();
+    const callLmStudio = async (baseUrl, apiKey, payload) => {
+        const normalizedBaseUrl = (baseUrl || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`;
         }
-        if (!apiKey) {
-            throw new Error('OpenAI API key missing. Please set it in popup.');
+        const response = await fetch(`${normalizedBaseUrl}/chat/completions`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`LM Studio Error: ${response.status} - ${errorText}`);
         }
-        window.openai_api_key = apiKey;
+        return response.json();
+    };
 
-        const jsonData = await buildWosQueryPayload(text);
-        const result = await callOpenAI(apiKey, jsonData);
-        const rawText = result?.output?.[0]?.content?.[0]?.text || '';
+    const extractRowTextFromResult = async (rawText) => {
         const codeBlockMatch = rawText.match(/```(?:wosquery|json)?\s*([\s\S]*?)```/i);
         const jsonText = (codeBlockMatch ? codeBlockMatch[1] : rawText).trim();
         const parsedResult = JSON.parse(jsonText);
@@ -1296,6 +1531,42 @@ window.wosids = [];
             console.warn('[WOS Query Builder] missing rowText from response:', parsedResult);
         }
         return rowText || null;
+    };
+
+    const runWosQueryByProvider = async (text) => {
+        const provider = (await requestStorage("get", WOS_QUERY_PROVIDER_STORAGE_KEY)) || 'openai';
+        const systemPrompt = await loadPrompt();
+
+        if (provider === 'lmstudio') {
+            const baseUrl = (await requestStorage("get", LM_STUDIO_BASE_URL_STORAGE_KEY)) || 'http://127.0.0.1:1234/v1';
+            const model = (await requestStorage("get", LM_STUDIO_MODEL_STORAGE_KEY)) || '';
+            const apiKey = (await requestStorage("get", LM_STUDIO_API_KEY_STORAGE_KEY)) || '';
+            if (!model) {
+                throw new Error('LM Studio model missing. Please set it in popup.');
+            }
+            const payload = {
+                model,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: text }
+                ],
+                temperature: 0,
+                max_tokens: 1024
+            };
+            const result = await callLmStudio(baseUrl, apiKey, payload);
+            const rawText = result?.choices?.[0]?.message?.content || '';
+            return extractRowTextFromResult(rawText);
+        }
+
+        const apiKey = (await requestStorage("get", CHAT_API_KEY_STORAGE_KEY)) || '';
+        const model = (await requestStorage("get", CHAT_MODEL_STORAGE_KEY)) || 'gpt-4o-mini';
+        if (!apiKey) {
+            throw new Error('OpenAI API key missing. Please set it in popup.');
+        }
+        const jsonData = await buildOpenAIWosQueryPayload(text, model);
+        const result = await callOpenAI(apiKey, jsonData);
+        const rawText = result?.output?.[0]?.content?.[0]?.text || '';
+        return extractRowTextFromResult(rawText);
     };
 
     // 处理提交
@@ -1312,17 +1583,9 @@ window.wosids = [];
         wosQueryBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
 
         try {
-            // 使用与 Chat 面板完全相同的实现
-            if (typeof window.openai_api_chat_query === 'function') {
-                await window.openai_api_chat_query(queryText);
-                console.log('[WOS Query Builder] Query executed successfully');
-                // 清空输入框
-                wosQueryInput.value = '';
-            } else {
-                await runWosQueryFallback(queryText);
-                console.log('[WOS Query Builder] Query executed successfully (fallback)');
-                wosQueryInput.value = '';
-            }
+            await runWosQueryByProvider(queryText);
+            console.log('[WOS Query Builder] Query executed successfully');
+            wosQueryInput.value = '';
         } catch (error) {
             console.error('[WOS Query Builder] Query execution failed:', error);
             alert('Query failed: ' + (error.message || 'Unknown error'));
@@ -1334,16 +1597,18 @@ window.wosids = [];
 
     wosQueryBtn.onclick = handleWosQuery;
 
-    // 支持回车键提交
+    // 支持聊天输入风格快捷键
     wosQueryInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             handleWosQuery();
         }
     });
 
+    wosQueryActions.appendChild(wosQueryHint);
+    wosQueryActions.appendChild(wosQueryBtn);
     wosQueryRow.appendChild(wosQueryInput);
-    wosQueryRow.appendChild(wosQueryBtn);
+    wosQueryRow.appendChild(wosQueryActions);
     builderTabPanel.appendChild(wosQueryRow);
     box.appendChild(resizeHandle);
 
