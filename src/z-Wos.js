@@ -1678,6 +1678,61 @@ class WosUUID {
         }
     }
 
+    async #export_bib(uuid = '', markFrom = 1, markTo = 2, filters = 'authorTitleSource') {
+        const jsondata = {
+            "parentQid": uuid,
+            "sortBy": "relevance",
+            "displayTimesCited": "true",
+            "displayCitedRefs": "true",
+            "product": "UA",
+            "colName": "WOS",
+            "displayUsageInfo": "true",
+            "fileOpt": "othersoftware",
+            "action": "saveToBibtex",
+            "markFrom": `${markFrom}`,
+            "markTo": `${markTo}`,
+            "view": "summary",
+            "isRefQuery": "false",
+            "locale": "en_US",
+            "filters": filters
+        };
+        try {
+            const response = await fetch('https://www.webofscience.com/api/wosnx/indic/export/saveToFile', {
+                method: 'POST',
+                headers: {
+                    'accept': 'application/json, text/plain, */*',
+                    'accept-language': 'en,zh-TW;q=0.9,zh;q=0.8',
+                    'cache-control': 'no-cache',
+                    'content-type': 'application/json',
+                    'origin': window.location.origin,
+                    'pragma': 'no-cache',
+                    'priority': 'u=1, i',
+                    'referer': window.location.href + "(overlay:export/exbt)",
+                    'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"macOS"',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin',
+                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+                    'x-1p-wos-sid': window.sessionData.BasicProperties.SID,
+                    'cookie': document.cookie
+                },
+                body: JSON.stringify(jsondata)
+            });
+
+            if (!response.ok) {
+                console.error(`bib export failed:uuid: ${uuid} \n status code: ${response.status}`);
+                return null;
+            }
+            const text = await response.text();
+            console.log(`fetch bib records from ${markFrom} to ${markTo} for UUID: ${uuid}`);
+            return text;
+        } catch (e) {
+            return null;
+        }
+    }
+
     /**
       - 后台请求的方式, 批量导出指定范围的文献记录 保存为本地txt文件
       - authorTitleSource
@@ -1782,6 +1837,122 @@ class WosUUID {
             phase: 'complete',
             uuid: this.value,
             fieldList,
+            batchSize,
+            totalRecords,
+            totalBatches,
+            completedBatches
+        });
+        return {
+            status: 'completed',
+            uuid: this.value,
+            totalRecords,
+            totalBatches,
+            completedBatches
+        };
+    }
+
+    /**
+      - 后台请求的方式, 批量导出指定范围的文献记录 保存为本地bib文件
+      - filters:
+      - authorTitleSource
+      - authorTitleSourceAbstract
+      */
+    async export_batchSize_toBib(markFrom = 1, markTo = 0, batchSize = 200, onProgress = null) {
+        const filters = 'authorTitleSource';
+        const emitProgress = (payload = {}) => {
+            if (typeof onProgress !== 'function') return;
+            try {
+                onProgress(payload);
+            } catch (error) {
+                console.warn('[WOS] export_batchSize_toBib progress callback failed:', error);
+            }
+        };
+
+        const res = await this.info();
+        if (!res) {
+            console.error('Failed to retrieve UUID information.');
+            emitProgress({ phase: 'error', message: 'Failed to retrieve UUID information.' });
+            return null;
+        }
+        const uuid = res.uuid;
+        this.value = uuid;
+
+        if (!res || res.status === 'failed') {
+            console.error('Failed to retrieve UUID information.');
+            emitProgress({ phase: 'error', message: 'Failed to retrieve UUID information.' });
+            return null;
+        }
+
+        const max_ref_count = parseInt(res.ref_count);
+        if (markTo == 0) {
+            markTo = max_ref_count;
+        } else if (markTo > max_ref_count) {
+            markTo = max_ref_count;
+        }
+        console.log(`Starting bib download task: \nUUID: ${this.value} \nRecords: ${markFrom} to ${markTo}, Filters: ${filters} \nbatch size: ${batchSize}`);
+
+        let current = markFrom;
+        const totalRecords = Math.max(markTo - markFrom + 1, 0);
+        const totalBatches = totalRecords > 0 ? Math.ceil(totalRecords / batchSize) : 0;
+        let completedBatches = 0;
+
+        emitProgress({
+            phase: 'start',
+            uuid: this.value,
+            markFrom,
+            markTo,
+            filters,
+            batchSize,
+            totalRecords,
+            totalBatches,
+            completedBatches
+        });
+
+        while (current <= markTo) {
+            const batchEnd = Math.min(current + batchSize - 1, markTo);
+            const temp = await this.#export_bib(
+                uuid,
+                current,
+                batchEnd,
+                filters,
+            );
+            if (temp === null) {
+                const message = `Bib export request failed for records ${current}-${batchEnd}.`;
+                console.error(message);
+                emitProgress({
+                    phase: 'error',
+                    uuid: this.value,
+                    message,
+                    current,
+                    batchEnd,
+                    completedBatches,
+                    totalBatches
+                });
+                throw new Error(message);
+            }
+
+            const filename = `${this.value}_${current}_${batchEnd}`;
+            await asy_webFuncs.saveTextToFile(temp, filename, 'bib');
+            completedBatches += 1;
+            emitProgress({
+                phase: 'batch',
+                uuid: this.value,
+                filters,
+                batchSize,
+                totalRecords,
+                totalBatches,
+                completedBatches,
+                current,
+                batchEnd,
+                filename: `${filename}.bib`
+            });
+            current = batchEnd + 1;
+        }
+
+        emitProgress({
+            phase: 'complete',
+            uuid: this.value,
+            filters,
             batchSize,
             totalRecords,
             totalBatches,

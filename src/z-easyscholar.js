@@ -404,6 +404,8 @@ async function getPublicationRank(SO) {
     const contentBox = document.createElement("div");
     contentBox.style.display = "flex";
     contentBox.style.flexDirection = "column";
+    contentBox.style.flex = "1";
+    contentBox.style.minHeight = "0";
     contentBox.style.gap = "6px";
     contentBox.style.padding = "8px";
     contentBox.style.background = "#ffffff";
@@ -495,35 +497,30 @@ async function getPublicationRank(SO) {
     // Row 2: Journal name input
     const row2 = document.createElement("div");
     row2.style.display = "flex";
-    row2.style.alignItems = "center";
-    row2.style.gap = "4px";
-    row2.style.padding = "5px 8px";
+    row2.style.flexDirection = "column";
+    row2.style.flex = "1";
+    row2.style.minHeight = "0";
+    row2.style.gap = "8px";
+    row2.style.padding = "10px";
     row2.style.background = "#ffffff";
-    row2.style.border = "1px solid #dde4ec";
-    row2.style.borderRadius = "2px";
+    row2.style.border = "1px solid rgba(208, 217, 227, 0.6)";
+    row2.style.borderRadius = "14px";
+    row2.style.boxShadow = "0 1px 3px rgba(15, 23, 42, 0.04)";
 
-    const soLabel = document.createElement("span");
-    soLabel.textContent = "Journal:";
-    soLabel.style.color = "#274c6b";
-    soLabel.style.fontSize = "12px";
-    soLabel.style.fontWeight = "bold";
-    soLabel.style.width = "54px";
-    soLabel.style.textAlign = "right";
-    soLabel.style.whiteSpace = "nowrap";
-
-    const soInput = document.createElement("input");
-    soInput.type = "text";
+    const soInput = document.createElement("textarea");
     soInput.placeholder = "Enter journal name (e.g. Nature)";
     soInput.style.flex = "1";
-    soInput.style.height = "24px";
-    soInput.style.border = "1px solid #cfd8e2";
+    soInput.style.minHeight = "0";
+    soInput.style.border = "none";
     soInput.style.background = "#ffffff";
-    soInput.style.padding = "0 8px";
-    soInput.style.borderRadius = "2px";
+    soInput.style.padding = "0";
+    soInput.style.borderRadius = "0";
     soInput.style.outline = "none";
     soInput.style.fontSize = "12px";
     soInput.style.color = "#1f3447";
     soInput.style.boxSizing = "border-box";
+    soInput.style.lineHeight = "1.5";
+    soInput.style.resize = "none";
 
     // History navigation for journal input
     let historyIndex = -1;
@@ -676,25 +673,27 @@ async function getPublicationRank(SO) {
         }
     });
 
-    row2.appendChild(soLabel);
-    row2.appendChild(soInput);
-
-    // Row 3: Capture, Query and Clear buttons
+    // Row 3: actions
     const row3 = document.createElement("div");
     row3.style.display = "flex";
     row3.style.alignItems = "center";
-    row3.style.gap = "4px";
+    row3.style.justifyContent = "space-between";
+    row3.style.gap = "8px";
     row3.style.padding = "0";
+
+    const rightActions = document.createElement("div");
+    rightActions.style.display = "flex";
+    rightActions.style.alignItems = "center";
+    rightActions.style.gap = "4px";
 
     const captureBtn = document.createElement("button");
     captureBtn.textContent = "Pick";
-    captureBtn.style.flex = "1";
     captureBtn.style.padding = "3px 8px";
-    captureBtn.style.height = "24px";
+    captureBtn.style.height = "32px";
     captureBtn.style.background = "#f7f9fb";
     captureBtn.style.color = "#274c6b";
     captureBtn.style.border = "1px solid #d0d9e3";
-    captureBtn.style.borderRadius = "2px";
+    captureBtn.style.borderRadius = "8px";
     captureBtn.style.cursor = "pointer";
     captureBtn.style.fontSize = "11px";
     captureBtn.style.fontWeight = "600";
@@ -703,13 +702,12 @@ async function getPublicationRank(SO) {
 
     const queryBtn = document.createElement("button");
     queryBtn.textContent = "Search";
-    queryBtn.style.flex = "1";
     queryBtn.style.padding = "3px 8px";
-    queryBtn.style.height = "24px";
+    queryBtn.style.height = "32px";
     queryBtn.style.background = "#174b78";
     queryBtn.style.color = "#fff";
     queryBtn.style.border = "1px solid #123a5c";
-    queryBtn.style.borderRadius = "2px";
+    queryBtn.style.borderRadius = "8px";
     queryBtn.style.cursor = "pointer";
     queryBtn.style.fontSize = "11px";
     queryBtn.style.fontWeight = "600";
@@ -717,38 +715,25 @@ async function getPublicationRank(SO) {
 
     const testBtn = document.createElement("button");
     testBtn.textContent = "Open SO";
-    testBtn.style.flex = "1";
     testBtn.style.padding = "3px 8px";
-    testBtn.style.height = "24px";
+    testBtn.style.height = "32px";
     testBtn.style.background = "#ffffff";
     testBtn.style.color = "#1f5a92";
     testBtn.style.border = "1px solid #c8d5e2";
-    testBtn.style.borderRadius = "2px";
+    testBtn.style.borderRadius = "8px";
     testBtn.style.cursor = "pointer";
     testBtn.style.fontSize = "11px";
     testBtn.style.fontWeight = "600";
     testBtn.style.outline = "none";
+    testBtn.style.whiteSpace = "nowrap";
     testBtn.title = "Open Web of Science SO query with current journal input";
 
-    const clearBtn = document.createElement("button");
-    clearBtn.textContent = "Clear";
-    clearBtn.style.flex = "1";
-    clearBtn.style.padding = "3px 8px";
-    clearBtn.style.height = "24px";
-    clearBtn.style.background = "#ffffff";
-    clearBtn.style.color = "#7b3f3a";
-    clearBtn.style.border = "1px solid #d8c9c6";
-    clearBtn.style.borderRadius = "2px";
-    clearBtn.style.cursor = "pointer";
-    clearBtn.style.fontSize = "11px";
-    clearBtn.style.fontWeight = "600";
-    clearBtn.style.outline = "none";
-    clearBtn.title = "Clear all saved journal data";
-
-    row3.appendChild(queryBtn);
+    rightActions.appendChild(captureBtn);
+    rightActions.appendChild(queryBtn);
     row3.appendChild(testBtn);
-    row3.appendChild(captureBtn);
-    row3.appendChild(clearBtn);
+    row3.appendChild(rightActions);
+    row2.appendChild(soInput);
+    row2.appendChild(row3);
 
     // Capture state
     let captureEnabled = false;
@@ -1017,16 +1002,16 @@ async function getPublicationRank(SO) {
     });
 
     contentBox.appendChild(row2);
-    contentBox.appendChild(row3);
 
     // Result table container
     const resultContainer = document.createElement("div");
     resultContainer.style.display = "none";
+    resultContainer.style.flexShrink = "0";
     resultContainer.style.maxHeight = "500px";
     resultContainer.style.overflowY = "auto";
     resultContainer.style.background = "#ffffff";
     resultContainer.style.border = "1px solid #dde4ec";
-    resultContainer.style.borderRadius = "2px";
+    resultContainer.style.borderRadius = "10px";
     resultContainer.style.marginTop = "4px";
 
     const resultTable = document.createElement("table");
@@ -1104,25 +1089,6 @@ async function getPublicationRank(SO) {
         resultTable.appendChild(tbody);
         resultContainer.style.display = "block";
     }
-
-    // Clear button click event
-    clearBtn.addEventListener("click", () => {
-        if (confirm("Clear all saved journal query data?")) {
-            clearJournalHistory();
-            soInput.value = "";
-            currentInput = "";
-            historyIndex = -1;
-            resultContainer.style.display = "none";
-            resultTable.innerHTML = "";
-            console.log("Journal history cleared");
-            statusBar.textContent = "History cleared";
-            statusBar.style.color = "#ffd7d2";
-            setTimeout(() => {
-                statusBar.textContent = "Ready";
-                statusBar.style.color = "rgba(255,255,255,0.82)";
-            }, 2000);
-        }
-    });
 
     const focusPanelInput = () => {
         if (!soInput || typeof soInput.focus !== "function") {

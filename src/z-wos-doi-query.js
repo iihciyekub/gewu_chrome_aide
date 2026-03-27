@@ -391,7 +391,7 @@ window.wosids = [];
     queryTabBtn.style.fontWeight = '600';
 
     const exportTabBtn = document.createElement('button');
-    exportTabBtn.textContent = 'DOI TXT Export';
+    exportTabBtn.textContent = 'WOS Data Export';
     exportTabBtn.style.flex = '1';
     exportTabBtn.style.padding = '3px 8px';
     exportTabBtn.style.border = '1px solid #c8d5e2';
@@ -475,6 +475,7 @@ window.wosids = [];
     const builderTabPanel = document.createElement('div');
     builderTabPanel.style.display = 'none';
     builderTabPanel.style.flexDirection = 'column';
+    builderTabPanel.style.flex = '1';
     builderTabPanel.style.minHeight = '100%';
     builderTabPanel.style.gap = '6px';
     builderTabPanel.style.background = '#ffffff';
@@ -638,21 +639,34 @@ window.wosids = [];
     const contentBox = document.createElement("div");
     contentBox.style.display = "flex";
     contentBox.style.flexDirection = "column";
+    contentBox.style.flex = "1";
+    contentBox.style.minHeight = "0";
     contentBox.style.gap = "6px";
     contentBox.style.padding = "0";
 
+    const queryComposer = document.createElement("div");
+    queryComposer.style.display = "flex";
+    queryComposer.style.flexDirection = "column";
+    queryComposer.style.flex = "1";
+    queryComposer.style.minHeight = "0";
+    queryComposer.style.gap = "8px";
+    queryComposer.style.padding = "10px";
+    queryComposer.style.border = "1px solid #d7dfe8";
+    queryComposer.style.borderRadius = "14px";
+    queryComposer.style.background = "#ffffff";
+    queryComposer.style.boxShadow = "0 1px 3px rgba(15, 23, 42, 0.04)";
 
     const textarea = document.createElement("textarea");
     textarea.placeholder = "Enter WOS IDs or DOIs here...\nOne per line\nHistory supported (ctrl(control) + ↑/↓ to navigate)";
     textarea.style.width = "100%";
-    textarea.style.minHeight = "200px";
-    textarea.style.maxHeight = "600px";
-    textarea.style.border = "1px solid #e4ebf1";
-    textarea.style.padding = "6px 8px";
-    textarea.style.borderRadius = "2px";
+    textarea.style.flex = "1";
+    textarea.style.minHeight = "0";
+    textarea.style.border = "none";
+    textarea.style.padding = "0";
+    textarea.style.borderRadius = "0";
     textarea.style.outline = "none";
     textarea.style.fontSize = "11px";
-    textarea.style.resize = "vertical";
+    textarea.style.resize = "none";
     textarea.style.fontFamily = "Consolas, 'Courier New', monospace";
     textarea.style.boxSizing = "border-box";
     textarea.style.background = "#ffffff";
@@ -745,24 +759,29 @@ window.wosids = [];
 
     });
 
-    // contentBox.appendChild(textareaLabel);
-    contentBox.appendChild(textarea);
+    queryComposer.appendChild(textarea);
 
     // 按钮行
     const buttonRow = document.createElement("div");
     buttonRow.style.display = "flex";
-    buttonRow.style.gap = "4px";
+    buttonRow.style.alignItems = "center";
+    buttonRow.style.justifyContent = "space-between";
+    buttonRow.style.gap = "8px";
+
+    const rightActions = document.createElement("div");
+    rightActions.style.display = "flex";
+    rightActions.style.alignItems = "center";
+    rightActions.style.gap = "4px";
 
     // Query 按钮
     const queryBtn = document.createElement("button");
     queryBtn.textContent = "Search";
-    queryBtn.style.flex = "1";
     queryBtn.style.padding = "3px 8px";
-    queryBtn.style.height = "24px";
+    queryBtn.style.height = "32px";
     queryBtn.style.background = "#174b78";
     queryBtn.style.color = "#fff";
     queryBtn.style.border = "1px solid #123a5c";
-    queryBtn.style.borderRadius = "2px";
+    queryBtn.style.borderRadius = "8px";
     queryBtn.style.cursor = "pointer";
     queryBtn.style.fontSize = "11px";
     queryBtn.style.fontWeight = "600";
@@ -786,13 +805,12 @@ window.wosids = [];
     // 创建自动提取切换按钮
     const autoExtractBtn = document.createElement("button");
     autoExtractBtn.textContent = autoExtractEnabled ? "Auto: ON" : "Auto: OFF";
-    autoExtractBtn.style.flex = "1";
     autoExtractBtn.style.padding = "3px 8px";
-    autoExtractBtn.style.height = "24px";
+    autoExtractBtn.style.height = "32px";
     autoExtractBtn.style.background = autoExtractEnabled ? "#edf4fa" : "#f7f9fb";
     autoExtractBtn.style.color = autoExtractEnabled ? "#174b78" : "#486581";
     autoExtractBtn.style.border = autoExtractEnabled ? "1px solid #9eb6cb" : "1px solid #d0d9e3";
-    autoExtractBtn.style.borderRadius = "2px";
+    autoExtractBtn.style.borderRadius = "8px";
     autoExtractBtn.style.cursor = "pointer";
     autoExtractBtn.style.fontSize = "11px";
     autoExtractBtn.style.fontWeight = "600";
@@ -811,10 +829,10 @@ window.wosids = [];
 
     };
 
-    buttonRow.appendChild(queryBtn);
     buttonRow.appendChild(autoExtractBtn);
 
-    contentBox.appendChild(buttonRow);
+    queryComposer.appendChild(buttonRow);
+    contentBox.appendChild(queryComposer);
     queryTabPanel.appendChild(contentBox);
 
     // === 底部添加 DOI/WOS Data Export 按钮 ===
@@ -835,7 +853,7 @@ window.wosids = [];
     exportFlowTitle.style.fontWeight = '600';
 
     const exportFlowHint = document.createElement('div');
-    exportFlowHint.textContent = 'Step 1: Select directory -> Step 2: Export -> Step 3: Check progress';
+    exportFlowHint.textContent = 'Step 1: Select directory -> Step 2: Export';
     exportFlowHint.style.color = '#6b7c93';
     exportFlowHint.style.fontSize = '10px';
     exportFlowHint.style.lineHeight = '1.4';
@@ -958,9 +976,34 @@ window.wosids = [];
         button.appendChild(document.createTextNode(text));
     };
 
+    const exportFormatRow = document.createElement('div');
+    exportFormatRow.style.display = 'flex';
+    exportFormatRow.style.gap = '6px';
+    exportFormatRow.style.alignItems = 'center';
+
+    const exportFormatLabel = document.createElement('div');
+    exportFormatLabel.textContent = 'Step 2 Format';
+    exportFormatLabel.style.color = '#486581';
+    exportFormatLabel.style.whiteSpace = 'nowrap';
+
+    const exportFormatSelect = document.createElement('select');
+    exportFormatSelect.style.flex = '1';
+    exportFormatSelect.style.height = '30px';
+    exportFormatSelect.style.padding = '0 10px';
+    exportFormatSelect.style.border = '1px solid #d0d9e3';
+    exportFormatSelect.style.borderRadius = '8px';
+    exportFormatSelect.style.background = '#fff';
+    exportFormatSelect.innerHTML = `
+        <option value="txt">TXT</option>
+        <option value="bib">BIB</option>
+    `;
+
+    exportFormatRow.appendChild(exportFormatLabel);
+    exportFormatRow.appendChild(exportFormatSelect);
+
     const exportBtn = document.createElement('button');
-    const exportBtnDefaultText = 'Step 2: Export all (500 per txt file)';
-    exportBtn.textContent = exportBtnDefaultText;
+    const getExportBtnDefaultText = () => `Step 2: Export all (500 per ${exportFormatSelect.value} file)`;
+    exportBtn.textContent = getExportBtnDefaultText();
     exportBtn.style.display = 'block';
     exportBtn.style.width = '100%';
     exportBtn.style.padding = '4px 8px';
@@ -994,8 +1037,15 @@ window.wosids = [];
         exportBtn.disabled = !canExport;
         exportBtn.style.opacity = canExport ? '1' : '0.6';
         exportBtn.style.cursor = canExport ? 'pointer' : 'not-allowed';
-        exportBtn.title = hasDir ? 'Step 2: Export all records in 500-per-file batches' : 'Select export directory first';
+        if (!exportInProgress) {
+            exportBtn.textContent = getExportBtnDefaultText();
+        }
+        exportBtn.title = hasDir ? `Step 2: Export all records as ${exportFormatSelect.value.toUpperCase()} in 500-per-file batches` : 'Select export directory first';
     };
+
+    exportFormatSelect.addEventListener('change', () => {
+        syncExportFlowState();
+    });
 
     selectExportDirBtn.onclick = async () => {
         try {
@@ -1065,7 +1115,7 @@ window.wosids = [];
     exportProgressWrap.style.borderRadius = '0';
 
     const exportProgressStepTitle = document.createElement('div');
-    exportProgressStepTitle.textContent = 'Step 3: Export Progress';
+    exportProgressStepTitle.textContent = 'Progress';
     exportProgressStepTitle.style.color = '#486581';
     exportProgressStepTitle.style.fontSize = '10px';
     exportProgressStepTitle.style.marginBottom = '2px';
@@ -1107,12 +1157,14 @@ window.wosids = [];
         detailText = '',
         completed = 0,
         total = 0,
-        isError = false
+        isError = false,
+        hideBar = false
     } = {}) => {
         exportProgressWrap.style.display = visible ? 'block' : 'none';
         exportProgressText.textContent = statusText;
         exportProgressText.style.color = isError ? '#a5483f' : '#243b53';
         exportProgressDetail.textContent = detailText;
+        exportProgressBar.style.display = hideBar ? 'none' : 'block';
         const ratio = total > 0 ? Math.max(0, Math.min(completed / total, 1)) : 0;
         exportProgressFill.style.width = `${Math.round(ratio * 100)}%`;
         exportProgressFill.style.background = isError ? '#a5483f' : '#315f86';
@@ -1146,6 +1198,7 @@ window.wosids = [];
         }
         exportInProgress = true;
         syncExportFlowState();
+        const exportFormat = exportFormatSelect.value === 'bib' ? 'bib' : 'txt';
         const oldText = exportBtn.textContent;
         exportBtn.textContent = 'Step 2: Exporting...';
         let finalCompleted = 0;
@@ -1158,8 +1211,9 @@ window.wosids = [];
             total: 0
         });
         try {
-            if (window.wos && window.wos.uuid && typeof window.wos.uuid.export_batchSize_toTxt === 'function') {
-                await window.wos.uuid.export_batchSize_toTxt(1, 0, 200, (progress = {}) => {
+            const exportMethodName = exportFormat === 'bib' ? 'export_batchSize_toBib' : 'export_batchSize_toTxt';
+            if (window.wos && window.wos.uuid && typeof window.wos.uuid[exportMethodName] === 'function') {
+                await window.wos.uuid[exportMethodName](1, 0, 200, (progress = {}) => {
                     const {
                         phase = '',
                         completedBatches = 0,
@@ -1215,20 +1269,21 @@ window.wosids = [];
                         });
                     }
                 });
-                exportBtn.textContent = 'Step 2: Export completed!';
+                exportBtn.textContent = `Step 2: ${exportFormat.toUpperCase()} export completed!`;
                 renderExportProgress({
                     visible: true,
-                    statusText: `Export completed ${finalCompleted}/${finalTotal}`,
-                    detailText: 'All batch files are saved',
+                    statusText: `${exportFormat.toUpperCase()} export succeeded`,
+                    detailText: `Saved ${finalCompleted}/${finalTotal} batch files`,
                     completed: finalCompleted,
-                    total: finalTotal
+                    total: finalTotal,
+                    hideBar: true
                 });
             } else {
                 exportBtn.textContent = 'Step 2: Export function not found';
                 renderExportProgress({
                     visible: true,
                     statusText: 'Export function not found',
-                    detailText: 'window.wos.uuid.export_batchSize_toTxt is unavailable',
+                    detailText: `window.wos.uuid.${exportMethodName} is unavailable`,
                     completed: 0,
                     total: 0,
                     isError: true
@@ -1246,9 +1301,15 @@ window.wosids = [];
             });
         } finally {
             setTimeout(() => {
-                exportBtn.textContent = oldText || exportBtnDefaultText;
+                exportBtn.textContent = oldText || getExportBtnDefaultText();
                 exportInProgress = false;
                 syncExportFlowState();
+                if (exportProgressText.textContent.toLowerCase().includes('succeeded')) {
+                    exportProgressBar.style.display = 'none';
+                    exportProgressDetail.textContent = exportProgressDetail.textContent || 'Download completed.';
+                    return;
+                }
+                exportProgressWrap.style.display = 'none';
             }, 2000);
         }
     };
@@ -1284,14 +1345,14 @@ window.wosids = [];
     }
 
     asyncDoiBtn.style.display = 'none';
-    asyncDoiBtn.style.width = '100%';
+    asyncDoiBtn.style.width = 'auto';
     asyncDoiBtn.style.padding = '4px 8px';
-    asyncDoiBtn.style.height = '24px';
+    asyncDoiBtn.style.height = '32px';
     asyncDoiBtn.style.background = '#ffffff';
     asyncDoiBtn.style.color = '#fff';
     asyncDoiBtn.style.color = '#9a5b12';
     asyncDoiBtn.style.border = '1px solid #e0c39e';
-    asyncDoiBtn.style.borderRadius = '2px';
+    asyncDoiBtn.style.borderRadius = '8px';
     asyncDoiBtn.style.fontSize = '11px';
     asyncDoiBtn.style.cursor = 'pointer';
     asyncDoiBtn.style.boxShadow = 'none';
@@ -1344,8 +1405,11 @@ window.wosids = [];
         }
     };
 
-    queryTabPanel.appendChild(asyncDoiBtn);
+    rightActions.appendChild(asyncDoiBtn);
+    rightActions.appendChild(queryBtn);
+    buttonRow.appendChild(rightActions);
     exportFlowGroup.appendChild(selectExportDirBtn);
+    exportFlowGroup.appendChild(exportFormatRow);
     exportFlowGroup.appendChild(exportBtn);
     exportFlowGroup.appendChild(exportProgressWrap);
     exportTabPanel.appendChild(exportFlowGroup);
@@ -1354,6 +1418,8 @@ window.wosids = [];
     const wosQueryRow = document.createElement('div');
     wosQueryRow.style.display = 'flex';
     wosQueryRow.style.flexDirection = 'column';
+    wosQueryRow.style.flex = '1';
+    wosQueryRow.style.minHeight = '0';
     wosQueryRow.style.gap = '8px';
     wosQueryRow.style.padding = '10px';
     wosQueryRow.style.border = '1px solid #d7dfe8';
@@ -1366,12 +1432,13 @@ window.wosids = [];
     wosQueryInput.placeholder = 'Describe the WOS query you want to build...';
     wosQueryInput.rows = 4;
     wosQueryInput.style.width = '100%';
-    wosQueryInput.style.minHeight = '110px';
+    wosQueryInput.style.flex = '1';
+    wosQueryInput.style.minHeight = '0';
     wosQueryInput.style.padding = '0';
     wosQueryInput.style.border = 'none';
     wosQueryInput.style.borderRadius = '0';
     wosQueryInput.style.outline = 'none';
-    wosQueryInput.style.resize = 'vertical';
+    wosQueryInput.style.resize = 'none';
     wosQueryInput.style.background = '#ffffff';
     wosQueryInput.style.lineHeight = '1.5';
     wosQueryInput.style.boxSizing = 'border-box';
