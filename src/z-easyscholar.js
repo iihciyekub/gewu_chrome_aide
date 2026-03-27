@@ -90,10 +90,30 @@ function clearJournalHistory() {
     localStorage.removeItem(JOURNAL_HISTORY_KEY);
 }
 
+function getErrorMessage(error) {
+    if (!error) {
+        return "Unknown error";
+    }
+    if (typeof error === "string") {
+        return error;
+    }
+    if (error instanceof Error) {
+        return error.message || error.name || "Unknown error";
+    }
+    if (typeof error.message === "string" && error.message) {
+        return error.message;
+    }
+    try {
+        return JSON.stringify(error);
+    } catch (_jsonError) {
+        return String(error);
+    }
+}
+
 async function getPublicationRank(SO) {
     const apiKey = (window.easyscholar_api_key || "").trim();
     if (!apiKey) {
-        console.error("EasyScholar API key is required before querying");
+        console.warn("EasyScholar API key is required before querying");
         return null;
     }
     const encoded = encodeURIComponent(SO);
@@ -102,7 +122,7 @@ async function getPublicationRank(SO) {
         const res = await fetch(url);
         const data = await res.json();
         if (data.code !== 200) {
-            console.error("请求失败，返回信息：", data.message);
+            console.warn(`请求失败：${data.message || "unknown response"}`);
             return null;
         }
 
@@ -116,7 +136,7 @@ async function getPublicationRank(SO) {
 
         return mappedRea;
     } catch (err) {
-        console.error("请求失败：", err);
+        console.warn(`请求失败：${getErrorMessage(err)}`);
         return null;
     }
 }
@@ -125,6 +145,7 @@ async function getPublicationRank(SO) {
  * EasyScholar API Settings Panel
  */
 (async function () {
+    try {
     const requestStorage = (action, key, value) => new Promise((resolve) => {
         const requestId = `gewuaide-easyscholar-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const handler = (event) => {
@@ -179,10 +200,27 @@ async function getPublicationRank(SO) {
         const style = document.createElement("style");
         style.id = styleId;
         style.textContent = `
+#wos_easyscholar_panel {
+    color: #1f2937;
+}
 #wos_easyscholar_panel table,
 #wos_easyscholar_panel th,
 #wos_easyscholar_panel td {
     font-size: 14px !important;
+}
+#wos_easyscholar_panel input::placeholder {
+    color: #7b8794;
+}
+#wos_easyscholar_panel button {
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+#wos_easyscholar_panel button:hover {
+    box-shadow: none;
+}
+#wos_easyscholar_panel button:focus-visible,
+#wos_easyscholar_panel input:focus-visible {
+    outline: 2px solid #2f6fa8;
+    outline-offset: 1px;
 }
 `;
         (document.head || document.documentElement).appendChild(style);
@@ -218,14 +256,14 @@ async function getPublicationRank(SO) {
     box.style.left = `${Math.round(left)}px`;
     box.style.right = "auto";
     box.style.zIndex = "999999";
-    box.style.fontFamily = window.ENLIGHTENKEY_FONT_FAMILY || 'Arial, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif';
-    box.style.background = "rgba(0,0,0,0.85)";
+    box.style.fontFamily = window.ENLIGHTENKEY_FONT_FAMILY || '"Segoe UI", "Helvetica Neue", Arial, "Microsoft YaHei", "PingFang SC", sans-serif';
+    box.style.background = "#ffffff";
     box.style.padding = "0";
-    box.style.borderRadius = "8px";
+    box.style.borderRadius = "4px";
     box.style.display = "none"; // 默认隐藏，等待popup开启
     box.style.flexDirection = "column";
-    box.style.backdropFilter = "blur(5px)";
-    box.style.boxShadow = "0 4px 12px rgba(0,0,0,0.4)";
+    box.style.border = "1px solid #d7dfe8";
+    box.style.boxShadow = "0 1px 4px rgba(15, 23, 42, 0.08)";
     box.style.width = "500px";
     box.style.minWidth = "400px";
 
@@ -233,49 +271,73 @@ async function getPublicationRank(SO) {
     const controlRow = document.createElement("div");
     controlRow.style.display = "flex";
     controlRow.style.alignItems = "center";
-    controlRow.style.gap = "6px";
+    controlRow.style.gap = "4px";
     controlRow.style.justifyContent = "space-between";
     controlRow.style.cursor = "move";
-    controlRow.style.padding = "8px";
-    controlRow.style.background = "rgba(255,255,255,0.1)";
-    controlRow.style.borderRadius = "8px 8px 0 0";
+    controlRow.style.padding = "6px 10px";
+    controlRow.style.background = "#174b78";
+    controlRow.style.borderBottom = "1px solid #123a5c";
+    controlRow.style.borderRadius = "4px 4px 0 0";
 
     const title = document.createElement("span");
-    title.textContent = "EasyScholar";
+    title.textContent = "Journal Lookup";
     title.style.color = "#fff";
-    title.style.fontSize = "14px";
+    title.style.fontSize = "12px";
     title.style.fontWeight = "bold";
+    title.style.letterSpacing = "0";
+
+    const titleWrap = document.createElement("div");
+    titleWrap.style.display = "flex";
+    titleWrap.style.alignItems = "center";
+    titleWrap.style.gap = "6px";
+    titleWrap.style.minWidth = "0";
+    titleWrap.style.flex = "1";
+
+    const statusBar = document.createElement("span");
+    statusBar.style.color = "rgba(255,255,255,0.82)";
+    statusBar.style.fontSize = "11px";
+    statusBar.style.fontWeight = "500";
+    statusBar.style.whiteSpace = "nowrap";
+    statusBar.style.overflow = "hidden";
+    statusBar.style.textOverflow = "ellipsis";
+    statusBar.style.minWidth = "0";
+    statusBar.style.flex = "1 1 auto";
+    statusBar.textContent = "Ready";
+
+    titleWrap.appendChild(title);
+    titleWrap.appendChild(statusBar);
 
     const btnGroup = document.createElement("div");
     btnGroup.style.display = "flex";
     btnGroup.style.gap = "4px";
+    btnGroup.style.flexShrink = "0";
 
     const settingsBtn = document.createElement("button");
     settingsBtn.innerHTML = '<i class="fa-solid fa-key"></i>';
-    settingsBtn.style.background = "rgba(255,255,255,0.15)";
-    settingsBtn.style.border = "none";
+    settingsBtn.style.background = "transparent";
+    settingsBtn.style.border = "1px solid rgba(255,255,255,0.20)";
     settingsBtn.style.color = "#fff";
     settingsBtn.style.borderRadius = "4px";
     settingsBtn.style.cursor = "pointer";
     settingsBtn.style.display = "inline-flex";
     settingsBtn.style.alignItems = "center";
     settingsBtn.style.justifyContent = "center";
-    settingsBtn.style.padding = "4px 8px";
-    settingsBtn.style.fontSize = "12px";
+    settingsBtn.style.padding = "2px 6px";
+    settingsBtn.style.fontSize = "11px";
     settingsBtn.title = "Set API Key (Hide/Show)";
 
     const websiteBtn = document.createElement("button");
     websiteBtn.innerHTML = '<i class="fa-solid fa-globe"></i>';
-    websiteBtn.style.background = "rgba(255,255,255,0.15)";
-    websiteBtn.style.border = "none";
+    websiteBtn.style.background = "transparent";
+    websiteBtn.style.border = "1px solid rgba(255,255,255,0.20)";
     websiteBtn.style.color = "#fff";
     websiteBtn.style.borderRadius = "4px";
     websiteBtn.style.cursor = "pointer";
     websiteBtn.style.display = "inline-flex";
     websiteBtn.style.alignItems = "center";
     websiteBtn.style.justifyContent = "center";
-    websiteBtn.style.padding = "4px 8px";
-    websiteBtn.style.fontSize = "12px";
+    websiteBtn.style.padding = "2px 6px";
+    websiteBtn.style.fontSize = "11px";
     websiteBtn.title = "Visit easyscholar.cc to apply for API key";
     websiteBtn.onclick = () => {
         window.open("https://www.easyscholar.cc/", "_blank");
@@ -284,16 +346,16 @@ async function getPublicationRank(SO) {
     const closeBtn = document.createElement("button");
     closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
 
-    closeBtn.style.background = "rgba(255,255,255,0.15)";
-    closeBtn.style.border = "none";
+    closeBtn.style.background = "transparent";
+    closeBtn.style.border = "1px solid rgba(255,255,255,0.20)";
     closeBtn.style.color = "#fff";
     closeBtn.style.borderRadius = "4px";
     closeBtn.style.cursor = "pointer";
     closeBtn.style.display = "inline-flex";
     closeBtn.style.alignItems = "center";
     closeBtn.style.justifyContent = "center";
-    closeBtn.style.padding = "4px 8px";
-    closeBtn.style.fontSize = "12px";
+    closeBtn.style.padding = "2px 6px";
+    closeBtn.style.fontSize = "11px";
     closeBtn.title = "Close Panel";
     // closeBtn.onclick 将在清理函数定义后设置
 
@@ -301,7 +363,7 @@ async function getPublicationRank(SO) {
     btnGroup.appendChild(websiteBtn);
     btnGroup.appendChild(closeBtn);
 
-    controlRow.appendChild(title);
+    controlRow.appendChild(titleWrap);
     controlRow.appendChild(btnGroup);
 
     const ensurePanelInView = () => {
@@ -335,21 +397,26 @@ async function getPublicationRank(SO) {
     const contentBox = document.createElement("div");
     contentBox.style.display = "flex";
     contentBox.style.flexDirection = "column";
-    contentBox.style.gap = "8px";
+    contentBox.style.gap = "6px";
     contentBox.style.padding = "8px";
+    contentBox.style.background = "#ffffff";
 
     // Row 1: API Key input
     const row1 = document.createElement("div");
     row1.style.display = "flex";
     row1.style.alignItems = "center";
-    row1.style.gap = "6px";
+    row1.style.gap = "4px";
+    row1.style.padding = "5px 8px";
+    row1.style.background = "#ffffff";
+    row1.style.border = "1px solid #dde4ec";
+    row1.style.borderRadius = "2px";
 
     const apiLabel = document.createElement("span");
     apiLabel.textContent = "API Key:";
-    apiLabel.style.color = "#fff";
-    apiLabel.style.fontSize = "13px";
+    apiLabel.style.color = "#274c6b";
+    apiLabel.style.fontSize = "12px";
     apiLabel.style.fontWeight = "bold";
-    apiLabel.style.width = "65px";
+    apiLabel.style.width = "54px";
     apiLabel.style.textAlign = "right";
     apiLabel.style.whiteSpace = "nowrap";
 
@@ -357,12 +424,15 @@ async function getPublicationRank(SO) {
     apiInput.type = "text";
     apiInput.placeholder = "Enter EasyScholar API Key";
     apiInput.style.flex = "1";
-    apiInput.style.height = "26px";
-    apiInput.style.border = "none";
+    apiInput.style.height = "24px";
+    apiInput.style.border = "1px solid #cfd8e2";
+    apiInput.style.background = "#ffffff";
     apiInput.style.padding = "0 8px";
-    apiInput.style.borderRadius = "5px";
+    apiInput.style.borderRadius = "2px";
     apiInput.style.outline = "none";
-    apiInput.style.fontSize = "14px";
+    apiInput.style.fontSize = "12px";
+    apiInput.style.color = "#1f3447";
+    apiInput.style.boxSizing = "border-box";
 
     // Mask API key display (show first 6 and last 4 chars)
     function maskApiKey(key) {
@@ -418,14 +488,18 @@ async function getPublicationRank(SO) {
     const row2 = document.createElement("div");
     row2.style.display = "flex";
     row2.style.alignItems = "center";
-    row2.style.gap = "6px";
+    row2.style.gap = "4px";
+    row2.style.padding = "5px 8px";
+    row2.style.background = "#ffffff";
+    row2.style.border = "1px solid #dde4ec";
+    row2.style.borderRadius = "2px";
 
     const soLabel = document.createElement("span");
     soLabel.textContent = "Journal:";
-    soLabel.style.color = "#fff";
-    soLabel.style.fontSize = "13px";
+    soLabel.style.color = "#274c6b";
+    soLabel.style.fontSize = "12px";
     soLabel.style.fontWeight = "bold";
-    soLabel.style.width = "65px";
+    soLabel.style.width = "54px";
     soLabel.style.textAlign = "right";
     soLabel.style.whiteSpace = "nowrap";
 
@@ -433,24 +507,28 @@ async function getPublicationRank(SO) {
     soInput.type = "text";
     soInput.placeholder = "Enter journal name (e.g. Nature)";
     soInput.style.flex = "1";
-    soInput.style.height = "26px";
-    soInput.style.border = "none";
+    soInput.style.height = "24px";
+    soInput.style.border = "1px solid #cfd8e2";
+    soInput.style.background = "#ffffff";
     soInput.style.padding = "0 8px";
-    soInput.style.borderRadius = "5px";
+    soInput.style.borderRadius = "2px";
     soInput.style.outline = "none";
-    soInput.style.fontSize = "13px";
+    soInput.style.fontSize = "12px";
+    soInput.style.color = "#1f3447";
+    soInput.style.boxSizing = "border-box";
 
     // History navigation for journal input
     let historyIndex = -1;
     let currentInput = "";
+    let isApplyingHistoryValue = false;
     let statusBarTimer = null; // 用于清除旧的定时器
 
-    function setStatus(message, background) {
+    function setStatus(message, color) {
         if (!statusBar) {
             return;
         }
         statusBar.textContent = message;
-        statusBar.style.background = background;
+        statusBar.style.color = color || "rgba(255,255,255,0.82)";
     }
 
     function ensureApiKeyConfigured() {
@@ -474,6 +552,65 @@ async function getPublicationRank(SO) {
         return false;
     }
 
+    function hideApiKeyRow() {
+        row1.style.display = "none";
+        localStorage.setItem(SETTINGS_VISIBLE_KEY, "false");
+        if (!isApiFocused) {
+            apiInput.value = maskApiKey(actualApiKey);
+        }
+    }
+
+    function showHistoryItem(historyItem) {
+        if (!historyItem) {
+            return;
+        }
+
+        isApplyingHistoryValue = true;
+        soInput.value = historyItem.journal || "";
+        isApplyingHistoryValue = false;
+
+        if (historyItem.result) {
+            displayResultTable(historyItem.result);
+        } else {
+            resultContainer.style.display = "none";
+            resultTable.innerHTML = "";
+        }
+
+        if (statusBarTimer) {
+            clearTimeout(statusBarTimer);
+        }
+
+        statusBar.textContent = `Loaded from history: ${historyItem.journal}`;
+        statusBar.style.color = "#d8e8f6";
+        statusBarTimer = setTimeout(() => {
+            statusBar.textContent = "Ready";
+            statusBar.style.color = "rgba(255,255,255,0.82)";
+            statusBarTimer = null;
+        }, 800);
+    }
+
+    function restoreManualInput() {
+        historyIndex = -1;
+        isApplyingHistoryValue = true;
+        soInput.value = currentInput || "";
+        isApplyingHistoryValue = false;
+        resultContainer.style.display = "none";
+        resultTable.innerHTML = "";
+
+        if (statusBarTimer) {
+            clearTimeout(statusBarTimer);
+            statusBarTimer = null;
+        }
+        statusBar.textContent = "Ready";
+        statusBar.style.color = "rgba(255,255,255,0.82)";
+    }
+
+    soInput.addEventListener("input", () => {
+        if (!isApplyingHistoryValue && historyIndex === -1) {
+            currentInput = soInput.value;
+        }
+    });
+
     soInput.addEventListener("keydown", async (e) => {
         const history = getJournalHistory();
 
@@ -488,67 +625,16 @@ async function getPublicationRank(SO) {
                 historyIndex++;
             }
 
-            const historyItem = history[historyIndex];
-            soInput.value = historyItem.journal;
-
-            // Display cached result from history
-            if (historyItem.result) {
-                displayResultTable(historyItem.result);
-
-                // 清除旧的定时器
-                if (statusBarTimer) clearTimeout(statusBarTimer);
-
-                // 立即更新 statusBar
-                statusBar.textContent = `Loaded from cache: ${historyItem.journal}`;
-                statusBar.style.background = "#16825D";
-
-                // 短暂延迟后恢复（减少到 800ms）
-                statusBarTimer = setTimeout(() => {
-                    statusBar.textContent = "Ready";
-                    statusBar.style.background = "#007ACC";
-                    statusBarTimer = null;
-                }, 800);
-            }
+            showHistoryItem(history[historyIndex]);
         } else if (e.key === "ArrowDown") {
             e.preventDefault();
             if (historyIndex === -1) return;
 
             if (historyIndex > 0) {
                 historyIndex--;
-                const historyItem = history[historyIndex];
-                soInput.value = historyItem.journal;
-
-                // Display cached result from history
-                if (historyItem.result) {
-                    displayResultTable(historyItem.result);
-
-                    // 清除旧的定时器
-                    if (statusBarTimer) clearTimeout(statusBarTimer);
-
-                    // 立即更新 statusBar
-                    statusBar.textContent = `Loaded from cache: ${historyItem.journal}`;
-                    statusBar.style.background = "#16825D";
-
-                    // 短暂延迟后恢复（减少到 800ms）
-                    statusBarTimer = setTimeout(() => {
-                        statusBar.textContent = "Ready";
-                        statusBar.style.background = "#007ACC";
-                        statusBarTimer = null;
-                    }, 800);
-                }
+                showHistoryItem(history[historyIndex]);
             } else {
-                historyIndex = -1;
-                soInput.value = currentInput;
-                // Clear result table when returning to manual input
-                resultContainer.style.display = "none";
-
-                // 清除定时器并立即恢复状态
-                if (statusBarTimer) {
-                    clearTimeout(statusBarTimer);
-                    statusBarTimer = null;
-                }
-                statusBar.textContent = "Ready";
-                statusBar.style.background = "#007ACC";
+                restoreManualInput();
             }
         } else if (e.key === "Enter") {
             const so = soInput.value.trim();
@@ -576,16 +662,17 @@ async function getPublicationRank(SO) {
             // Display result in table
             if (result) {
                 displayResultTable(result);
-                setStatus("Query completed", "#16825D");
+                hideApiKeyRow();
+                setStatus("Results loaded", "#315f86");
             } else {
-                setStatus("Query failed", "#D32F2F");
+                setStatus("Search failed", "#a5483f");
             }
 
             setTimeout(() => {
                 queryBtn.style.background = originalBg;
                 queryBtn.style.transform = "scale(1)";
                 isQuerying = false;
-                setStatus("Ready", "#007ACC");
+                setStatus("Ready", "#174b78");
             }, 3000);
         } else {
             // Reset history index when typing
@@ -600,74 +687,71 @@ async function getPublicationRank(SO) {
     const row3 = document.createElement("div");
     row3.style.display = "flex";
     row3.style.alignItems = "center";
-    row3.style.gap = "6px";
+    row3.style.gap = "4px";
+    row3.style.padding = "0";
 
     const captureBtn = document.createElement("button");
-    captureBtn.textContent = "Capture";
+    captureBtn.textContent = "Pick";
     captureBtn.style.flex = "1";
-    captureBtn.style.padding = "4px 12px";
+    captureBtn.style.padding = "3px 8px";
     captureBtn.style.height = "24px";
-    captureBtn.style.background = "rgba(255,152,0,0.8)";
-    captureBtn.style.color = "#fff";
-    captureBtn.style.border = "none";
-    captureBtn.style.borderRadius = "5px";
+    captureBtn.style.background = "#f7f9fb";
+    captureBtn.style.color = "#274c6b";
+    captureBtn.style.border = "1px solid #d0d9e3";
+    captureBtn.style.borderRadius = "2px";
     captureBtn.style.cursor = "pointer";
-    captureBtn.style.fontSize = "12px";
-    captureBtn.style.fontWeight = "bold";
+    captureBtn.style.fontSize = "11px";
+    captureBtn.style.fontWeight = "600";
     captureBtn.style.outline = "none";
-    captureBtn.style.transition = "all 0.2s ease";
     captureBtn.title = "Hover over JCR link to capture journal name";
 
     const queryBtn = document.createElement("button");
-    queryBtn.textContent = "Query";
+    queryBtn.textContent = "Search";
     queryBtn.style.flex = "1";
-    queryBtn.style.padding = "4px 12px";
+    queryBtn.style.padding = "3px 8px";
     queryBtn.style.height = "24px";
-    queryBtn.style.background = "rgba(76,175,80,0.8)";
+    queryBtn.style.background = "#174b78";
     queryBtn.style.color = "#fff";
-    queryBtn.style.border = "none";
-    queryBtn.style.borderRadius = "5px";
+    queryBtn.style.border = "1px solid #123a5c";
+    queryBtn.style.borderRadius = "2px";
     queryBtn.style.cursor = "pointer";
-    queryBtn.style.fontSize = "12px";
-    queryBtn.style.fontWeight = "bold";
+    queryBtn.style.fontSize = "11px";
+    queryBtn.style.fontWeight = "600";
     queryBtn.style.outline = "none";
-    queryBtn.style.transition = "all 0.2s ease";
 
     const testBtn = document.createElement("button");
-    testBtn.textContent = "Test";
+    testBtn.textContent = "Open SO";
     testBtn.style.flex = "1";
-    testBtn.style.padding = "4px 12px";
+    testBtn.style.padding = "3px 8px";
     testBtn.style.height = "24px";
-    testBtn.style.background = "rgba(33,150,243,0.85)";
-    testBtn.style.color = "#fff";
-    testBtn.style.border = "none";
-    testBtn.style.borderRadius = "5px";
+    testBtn.style.background = "#ffffff";
+    testBtn.style.color = "#1f5a92";
+    testBtn.style.border = "1px solid #c8d5e2";
+    testBtn.style.borderRadius = "2px";
     testBtn.style.cursor = "pointer";
-    testBtn.style.fontSize = "12px";
-    testBtn.style.fontWeight = "bold";
+    testBtn.style.fontSize = "11px";
+    testBtn.style.fontWeight = "600";
     testBtn.style.outline = "none";
-    testBtn.style.transition = "all 0.2s ease";
-    testBtn.title = "Run test with journal: Management science";
+    testBtn.title = "Open Web of Science SO query with current journal input";
 
     const clearBtn = document.createElement("button");
     clearBtn.textContent = "Clear";
     clearBtn.style.flex = "1";
-    clearBtn.style.padding = "4px 12px";
+    clearBtn.style.padding = "3px 8px";
     clearBtn.style.height = "24px";
-    clearBtn.style.background = "rgba(244,67,54,0.8)";
-    clearBtn.style.color = "#fff";
-    clearBtn.style.border = "none";
-    clearBtn.style.borderRadius = "5px";
+    clearBtn.style.background = "#ffffff";
+    clearBtn.style.color = "#7b3f3a";
+    clearBtn.style.border = "1px solid #d8c9c6";
+    clearBtn.style.borderRadius = "2px";
     clearBtn.style.cursor = "pointer";
-    clearBtn.style.fontSize = "12px";
-    clearBtn.style.fontWeight = "bold";
+    clearBtn.style.fontSize = "11px";
+    clearBtn.style.fontWeight = "600";
     clearBtn.style.outline = "none";
-    clearBtn.style.transition = "all 0.2s ease";
     clearBtn.title = "Clear all saved journal data";
 
-    row3.appendChild(captureBtn);
     row3.appendChild(queryBtn);
     row3.appendChild(testBtn);
+    row3.appendChild(captureBtn);
     row3.appendChild(clearBtn);
 
     // Capture state
@@ -747,12 +831,13 @@ async function getPublicationRank(SO) {
                 // Display result in table
                 if (result) {
                     displayResultTable(result);
-                    setStatus("Query completed", "#16825D");
+                    hideApiKeyRow();
+                    setStatus("Results loaded", "#315f86");
                 } else {
-                    setStatus("Query failed", "#D32F2F");
+                    setStatus("Search failed", "#a5483f");
                 }
                 setTimeout(() => {
-                    setStatus("Ready", "#007ACC");
+                    setStatus("Ready", "#174b78");
                 }, 3000);
             }, 1000); // 1 second delay
         }
@@ -764,7 +849,8 @@ async function getPublicationRank(SO) {
             if (!isModifierPressed) {
                 isModifierPressed = true;
                 // Visual feedback when Ctrl/Cmd is pressed
-                captureBtn.style.background = "rgba(76,175,80,0.8)";
+                captureBtn.style.background = "#edf4fa";
+                captureBtn.style.borderColor = "#9eb6cb";
                 captureBtn.textContent = "Hold";
                 console.log("Modifier key pressed - ready to capture");
             }
@@ -779,11 +865,13 @@ async function getPublicationRank(SO) {
             isModifierPressed = false;
             // Reset button visual
             if (captureEnabled) {
-                captureBtn.style.background = "rgba(244,67,54,0.8)";
+                captureBtn.style.background = "#edf4fa";
+                captureBtn.style.borderColor = "#9eb6cb";
                 captureBtn.textContent = "Stop";
             } else {
-                captureBtn.style.background = "rgba(255,152,0,0.8)";
-                captureBtn.textContent = "Capture";
+                captureBtn.style.background = "#f7f9fb";
+                captureBtn.style.borderColor = "#d0d9e3";
+                captureBtn.textContent = "Pick";
             }
             
             // When modifier key is released, execute query if text was captured
@@ -799,12 +887,13 @@ async function getPublicationRank(SO) {
                 // Display result in table
                 if (result) {
                     displayResultTable(result);
-                    setStatus("Query completed", "#16825D");
+                    hideApiKeyRow();
+                    setStatus("Results loaded", "#315f86");
                 } else {
-                    setStatus("Query failed", "#D32F2F");
+                    setStatus("Search failed", "#a5483f");
                 }
                 setTimeout(() => {
-                    setStatus("Ready", "#007ACC");
+                    setStatus("Ready", "#174b78");
                 }, 3000);
 
                 lastCapturedText = "";
@@ -819,8 +908,9 @@ async function getPublicationRank(SO) {
     // Function to stop capture mode
     function stopCapture() {
         captureEnabled = false;
-        captureBtn.style.background = "rgba(255,152,0,0.8)";
-        captureBtn.textContent = "Capture";
+        captureBtn.style.background = "#f7f9fb";
+        captureBtn.style.borderColor = "#d0d9e3";
+        captureBtn.textContent = "Pick";
 
         if (hoverTimer) {
             clearTimeout(hoverTimer);
@@ -843,7 +933,8 @@ async function getPublicationRank(SO) {
         } else {
             // Enable capture mode (for Method 2 - 1 second delay)
             captureEnabled = true;
-            captureBtn.style.background = "rgba(244,67,54,0.8)";
+            captureBtn.style.background = "#edf4fa";
+            captureBtn.style.borderColor = "#9eb6cb";
             captureBtn.textContent = "Stop";
 
             // Add mouseout listener to cancel timer for Method 2
@@ -878,8 +969,9 @@ async function getPublicationRank(SO) {
 
         isQuerying = true;
         const originalBg = queryBtn.style.background;
-        queryBtn.style.background = "rgba(56,142,60,1)";
+        queryBtn.style.background = "#123f67";
         queryBtn.style.transform = "scale(0.95)";
+        queryBtn.style.borderColor = "#0f3352";
 
         setStatus(`Querying journal: ${so}`, "#FFA500");
         console.log(`Querying journal: ${so}`);
@@ -888,24 +980,44 @@ async function getPublicationRank(SO) {
         // Display result in table
         if (result) {
             displayResultTable(result);
-            setStatus("Query completed", "#16825D");
+            hideApiKeyRow();
+            setStatus("Results loaded", "#315f86");
         } else {
-            setStatus("Query failed", "#D32F2F");
+            setStatus("Search failed", "#a5483f");
         }
 
         // Reset button state
         setTimeout(() => {
             queryBtn.style.background = originalBg;
+            queryBtn.style.borderColor = "#123a5c";
             queryBtn.style.transform = "scale(1)";
             isQuerying = false;
-            setStatus("Ready", "#007ACC");
+            setStatus("Ready", "#174b78");
         }, 3000);
     });
 
-    // Test button click event
-    testBtn.addEventListener("click", () => {
-        soInput.value = "Management science";
-        queryBtn.click();
+    // Open SO button click event
+    testBtn.addEventListener("click", async () => {
+        const so = soInput.value.trim();
+        if (!so) {
+            setStatus("Please enter journal name first", "#D32F2F");
+            return;
+        }
+
+        if (!window.wos || typeof window.wos.query !== "function") {
+            setStatus("wos.query is unavailable", "#D32F2F");
+            console.warn("window.wos.query is unavailable");
+            return;
+        }
+
+        setStatus(`Opening SO query: ${so}`, "#FFA500");
+        try {
+            await window.wos.query(`SO=${so}`);
+            setStatus("SO search opened", "#315f86");
+        } catch (error) {
+            console.warn(`Failed to open SO query: ${getErrorMessage(error)}`);
+            setStatus("Failed to open SO search", "#a5483f");
+        }
     });
 
     contentBox.appendChild(row1);
@@ -917,14 +1029,15 @@ async function getPublicationRank(SO) {
     resultContainer.style.display = "none";
     resultContainer.style.maxHeight = "500px";
     resultContainer.style.overflowY = "auto";
-    resultContainer.style.background = "rgba(255,255,255,0.05)";
-    resultContainer.style.borderRadius = "5px";
+    resultContainer.style.background = "#ffffff";
+    resultContainer.style.border = "1px solid #dde4ec";
+    resultContainer.style.borderRadius = "2px";
     resultContainer.style.marginTop = "4px";
 
     const resultTable = document.createElement("table");
     resultTable.style.width = "100%";
     resultTable.style.borderCollapse = "collapse";
-    resultTable.style.setProperty("font-size", "14px", "important");
+    resultTable.style.setProperty("font-size", "12px", "important");
     resultTable.style.fontFamily = "Consolas, 'Courier New', monospace";
 
     resultContainer.appendChild(resultTable);
@@ -944,24 +1057,24 @@ async function getPublicationRank(SO) {
         const headerRow = document.createElement("tr");
 
         const th1 = document.createElement("th");
-        th1.textContent = "Category";
-        th1.style.padding = "6px 8px";
-        th1.style.setProperty("font-size", "14px", "important");
+        th1.textContent = "Indicator";
+        th1.style.padding = "4px 7px";
+        th1.style.setProperty("font-size", "12px", "important");
         th1.style.textAlign = "left";
-        th1.style.background = "rgba(255,255,255,0.1)";
-        th1.style.color = "#fff";
+        th1.style.background = "#f6f8fb";
+        th1.style.color = "#234765";
         th1.style.fontWeight = "bold";
-        th1.style.borderBottom = "1px solid rgba(255,255,255,0.2)";
+        th1.style.borderBottom = "1px solid #dde4ec";
 
         const th2 = document.createElement("th");
-        th2.textContent = "Rank";
-        th2.style.padding = "6px 8px";
-        th2.style.setProperty("font-size", "14px", "important");
+        th2.textContent = "Value";
+        th2.style.padding = "4px 7px";
+        th2.style.setProperty("font-size", "12px", "important");
         th2.style.textAlign = "left";
-        th2.style.background = "rgba(255,255,255,0.1)";
-        th2.style.color = "#fff";
+        th2.style.background = "#f6f8fb";
+        th2.style.color = "#234765";
         th2.style.fontWeight = "bold";
-        th2.style.borderBottom = "1px solid rgba(255,255,255,0.2)";
+        th2.style.borderBottom = "1px solid #dde4ec";
 
         headerRow.appendChild(th1);
         headerRow.appendChild(th2);
@@ -973,19 +1086,20 @@ async function getPublicationRank(SO) {
 
         for (const [key, value] of Object.entries(result)) {
             const row = document.createElement("tr");
-            row.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+            row.style.borderBottom = "1px solid #eef3f7";
 
             const td1 = document.createElement("td");
             td1.textContent = key;
-            td1.style.padding = "4px 8px";
-            td1.style.setProperty("font-size", "14px", "important");
-            td1.style.color = "#ccc";
+            td1.style.padding = "2px 7px";
+            td1.style.setProperty("font-size", "12px", "important");
+            td1.style.color = "#486581";
 
             const td2 = document.createElement("td");
             td2.textContent = value || "-";
-            td2.style.padding = "4px 8px";
-            td2.style.setProperty("font-size", "14px", "important");
-            td2.style.color = "#fff";
+            td2.style.padding = "2px 7px";
+            td2.style.setProperty("font-size", "12px", "important");
+            td2.style.color = "#243b53";
+            td2.style.fontWeight = "600";
 
             row.appendChild(td1);
             row.appendChild(td2);
@@ -1007,26 +1121,13 @@ async function getPublicationRank(SO) {
             resultTable.innerHTML = "";
             console.log("Journal history cleared");
             statusBar.textContent = "History cleared";
-            statusBar.style.background = "#D32F2F";
+            statusBar.style.color = "#ffd7d2";
             setTimeout(() => {
                 statusBar.textContent = "Ready";
-                statusBar.style.background = "#007ACC";
+                statusBar.style.color = "rgba(255,255,255,0.82)";
             }, 2000);
         }
     });
-
-    // Status bar (VSCode style)
-    const statusBar = document.createElement("div");
-    statusBar.style.display = "flex";
-    statusBar.style.alignItems = "center";
-    statusBar.style.padding = "1px 12px";
-    statusBar.style.background = "#007ACC";
-    statusBar.style.color = "#fff";
-    statusBar.style.fontSize = "11px";
-    statusBar.style.borderRadius = "0 0 8px 8px";
-    statusBar.style.fontFamily = "Consolas, 'Courier New', monospace";
-    statusBar.style.minHeight = "16px";
-    statusBar.textContent = "Ready";
 
     const focusPanelInput = () => {
         if (!soInput || typeof soInput.focus !== "function") {
@@ -1048,7 +1149,6 @@ async function getPublicationRank(SO) {
 
     box.appendChild(controlRow);
     box.appendChild(contentBox);
-    box.appendChild(statusBar);
 
     document.body.appendChild(box);
 
@@ -1100,5 +1200,9 @@ async function getPublicationRank(SO) {
     closeBtn.onclick = () => {
         cleanup();
     };
+
+    } catch (error) {
+        console.warn(`EasyScholar panel init failed: ${getErrorMessage(error)}`);
+    }
 
 })();
