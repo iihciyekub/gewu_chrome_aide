@@ -184,6 +184,7 @@ window.wosids = [];
     const WIDTH_KEY = "clipboard-reader-box-width";
     const HEIGHT_KEY = "clipboard-reader-box-height";
     const HISTORY_KEY = "clipboard-reader-box-history";
+    const WOS_QUERY_HISTORY_KEY = "wos-query-builder-history";
     const EASYSCHOLAR_VERIFIED_KEY = "wos-easyscholar-api-key-verified";
     const EASYSCHOLAR_SYNC_EVENT = "__EASYSCHOLAR_API_KEY_SYNC__";
     const CHAT_API_KEY_STORAGE_KEY = "wosOpenaiApiKey";
@@ -205,6 +206,9 @@ window.wosids = [];
     // 历史记录管理
     let queryHistory = [];
     let historyIndex = -1;
+    let wosQueryHistory = [];
+    let wosQueryHistoryIndex = -1;
+    let wosQueryCurrentInput = "";
 
     function loadHistory() {
         try {
@@ -259,8 +263,63 @@ window.wosids = [];
         }
     }
 
+    function loadWosQueryHistory() {
+        try {
+            const saved = readStorage(WOS_QUERY_HISTORY_KEY, null);
+            wosQueryHistory = saved ? JSON.parse(saved) : [];
+        } catch (e) {
+            console.error("Failed to load WOS query history:", e);
+            wosQueryHistory = [];
+        }
+    }
+
+    function saveWosQueryHistory(queryText) {
+        if (!queryText.trim()) return;
+        wosQueryHistory = wosQueryHistory.filter(item => item !== queryText);
+        wosQueryHistory.unshift(queryText);
+        if (wosQueryHistory.length > MAX_HISTORY) {
+            wosQueryHistory = wosQueryHistory.slice(0, MAX_HISTORY);
+        }
+        writeStorage(WOS_QUERY_HISTORY_KEY, JSON.stringify(wosQueryHistory));
+        wosQueryHistoryIndex = -1;
+        wosQueryCurrentInput = "";
+    }
+
+    function navigateWosQueryHistory(direction) {
+        if (wosQueryHistory.length === 0) return;
+
+        if (direction === -1) {
+            if (wosQueryHistoryIndex === -1) {
+                wosQueryCurrentInput = wosQueryInput.value;
+            }
+            if (wosQueryHistoryIndex < wosQueryHistory.length - 1) {
+                wosQueryHistoryIndex++;
+                wosQueryInput.value = wosQueryHistory[wosQueryHistoryIndex];
+            }
+        } else if (direction === 1) {
+            if (wosQueryHistoryIndex > 0) {
+                wosQueryHistoryIndex--;
+                wosQueryInput.value = wosQueryHistory[wosQueryHistoryIndex];
+            } else if (wosQueryHistoryIndex === 0) {
+                wosQueryHistoryIndex = -1;
+                wosQueryInput.value = wosQueryCurrentInput;
+            }
+        }
+    }
+
+    function isCaretOnFirstLine(textareaEl) {
+        const start = textareaEl.selectionStart || 0;
+        return !textareaEl.value.slice(0, start).includes('\n');
+    }
+
+    function isCaretOnLastLine(textareaEl) {
+        const start = textareaEl.selectionStart || 0;
+        return !textareaEl.value.slice(start).includes('\n');
+    }
+
     // 加载历史记录
     loadHistory();
+    loadWosQueryHistory();
 
     // 创建主容器
     const box = document.createElement("div");
@@ -1644,6 +1703,7 @@ window.wosids = [];
             return;
         }
 
+        saveWosQueryHistory(queryText);
         console.log('[WOS Query Builder] Query text:', queryText);
         wosQueryBtn.disabled = true;
         const originalContent = wosQueryBtn.innerHTML;
@@ -1666,9 +1726,39 @@ window.wosids = [];
 
     // 支持聊天输入风格快捷键
     wosQueryInput.addEventListener('keydown', (e) => {
+        if (
+            e.key === 'ArrowUp' &&
+            !e.metaKey &&
+            !e.ctrlKey &&
+            !e.shiftKey &&
+            wosQueryInput.selectionStart === wosQueryInput.selectionEnd &&
+            isCaretOnFirstLine(wosQueryInput)
+        ) {
+            e.preventDefault();
+            navigateWosQueryHistory(-1);
+            return;
+        }
+        if (
+            e.key === 'ArrowDown' &&
+            !e.metaKey &&
+            !e.ctrlKey &&
+            !e.shiftKey &&
+            wosQueryInput.selectionStart === wosQueryInput.selectionEnd &&
+            isCaretOnLastLine(wosQueryInput)
+        ) {
+            e.preventDefault();
+            navigateWosQueryHistory(1);
+            return;
+        }
         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
             handleWosQuery();
+        }
+    });
+
+    wosQueryInput.addEventListener('input', () => {
+        if (wosQueryHistoryIndex === -1) {
+            wosQueryCurrentInput = wosQueryInput.value;
         }
     });
 

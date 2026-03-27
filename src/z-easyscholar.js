@@ -775,8 +775,23 @@ async function getPublicationRank(SO) {
         return getTextFromNode(event.target);
     };
 
+    const isInsideExtensionPanel = (event) => {
+        const path = event.composedPath ? event.composedPath() : [];
+        return path.some((node) => {
+            return node instanceof HTMLElement && (
+                node.id === "wos_easyscholar_panel" ||
+                node.id === "clipboard-reader-box" ||
+                node.id === "ref-paper-downloader" ||
+                node.closest?.("#wos_easyscholar_panel, #clipboard-reader-box, #ref-paper-downloader")
+            );
+        });
+    };
+
     // Global hover listener for capturing
     const globalHoverListener = (e) => {
+        if (isInsideExtensionPanel(e)) {
+            return;
+        }
         const capturedText = getCapturedTextFromEvent(e);
         if (!capturedText) {
             return;
@@ -786,7 +801,6 @@ async function getPublicationRank(SO) {
         if (isModifierPressed || e.metaKey || e.ctrlKey) {
             soInput.value = capturedText;
             lastCapturedText = capturedText;
-            console.log(`Captured text (Ctrl/Cmd mode): ${capturedText}`);
             return;
         }
 
@@ -833,7 +847,6 @@ async function getPublicationRank(SO) {
                 captureBtn.style.background = "#edf4fa";
                 captureBtn.style.borderColor = "#9eb6cb";
                 captureBtn.textContent = "Hold";
-                console.log("Modifier key pressed - ready to capture");
             }
         }
     };

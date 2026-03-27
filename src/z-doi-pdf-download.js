@@ -146,20 +146,20 @@ const SO_temp = {
     box.style.left = `${Math.round(left)}px`;
     box.style.right = "auto";
     box.style.transform = "none";
-    box.style.width = "305px";
+    box.style.width = "360px";
     box.style.zIndex = 999999;
-    box.style.background = "rgba(0,0,0)";
-    box.style.padding = "11px";
-    box.style.borderRadius = "8px";
+    box.style.background = "#ffffff";
+    box.style.padding = "0";
+    box.style.borderRadius = "4px";
     box.style.boxSizing = "border-box";
-    box.style.color = "#fff";
+    box.style.color = "#243b53";
     box.style.fontSize = "14px";
-    box.style.fontFamily = window.ENLIGHTENKEY_FONT_FAMILY || 'Arial, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif';
+    box.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     box.style.display = "none"; // 默认隐藏，等待popup开启
     box.style.flexDirection = "column";
-    box.style.gap = "10px";
-    box.style.maxHeight = "80vh";
-    box.style.backdropFilter = "blur(4px)";
+    box.style.border = "1px solid #d7dfe8";
+    box.style.boxShadow = "0 1px 4px rgba(15, 23, 42, 0.08)";
+    box.style.overflow = "hidden";
     document.body.appendChild(box);
 
     // 标题栏容器
@@ -167,30 +167,46 @@ const SO_temp = {
     titleBar.style.display = "flex";
     titleBar.style.justifyContent = "space-between";
     titleBar.style.alignItems = "center";
-    titleBar.style.marginBottom = "4px";
     titleBar.style.cursor = "move";
     titleBar.style.flex = "0 0 auto";
     titleBar.style.width = "100%";
+    titleBar.style.minHeight = "38px";
+    titleBar.style.padding = "6px 10px";
+    titleBar.style.background = "#174b78";
+    titleBar.style.borderBottom = "1px solid #123a5c";
+    titleBar.style.borderRadius = "4px 4px 0 0";
+    titleBar.style.boxSizing = "border-box";
     box.appendChild(titleBar);
 
     // 拖动手柄
     const dragHandle = document.createElement("div");
     dragHandle.textContent = "PDF Batch Downloader";
     dragHandle.style.fontWeight = "600";
-    dragHandle.style.fontSize = "13px";
+    dragHandle.style.fontSize = "12px";
     dragHandle.style.cursor = "inherit";
     dragHandle.style.userSelect = "none";
+    dragHandle.style.color = "#fff";
+    dragHandle.style.lineHeight = "1";
     titleBar.appendChild(dragHandle);
 
     // 关闭按钮
     const closeBtn = document.createElement("button");
-    closeBtn.textContent = "✕";
-    closeBtn.style.border = "none";
+    closeBtn.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
+    closeBtn.style.border = "1px solid rgba(255,255,255,0.20)";
     closeBtn.style.background = "transparent";
     closeBtn.style.color = "#fff";
     closeBtn.style.cursor = "pointer";
-    closeBtn.style.fontSize = "16px";
+    closeBtn.style.fontSize = "11px";
+    closeBtn.style.width = "22px";
+    closeBtn.style.height = "22px";
+    closeBtn.style.padding = "0";
+    closeBtn.style.borderRadius = "4px";
+    closeBtn.style.display = "inline-flex";
+    closeBtn.style.alignItems = "center";
+    closeBtn.style.justifyContent = "center";
+    closeBtn.style.flexShrink = "0";
     closeBtn.style.lineHeight = "1";
+    closeBtn.style.boxSizing = "border-box";
     closeBtn.title = "close";
     titleBar.appendChild(closeBtn);
 
@@ -199,33 +215,33 @@ const SO_temp = {
     const contentContainer = document.createElement("div");
     contentContainer.style.display = "flex";
     contentContainer.style.flexDirection = "column";
-    contentContainer.style.gap = "10px";
+    contentContainer.style.gap = "8px";
     contentContainer.style.flex = "1";
     contentContainer.style.minHeight = "0";
     contentContainer.style.overflowY = "auto";
     contentContainer.style.alignItems = "stretch";
     contentContainer.style.boxSizing = "border-box";
+    contentContainer.style.padding = "8px";
+    contentContainer.style.paddingTop = "6px";
     box.appendChild(contentContainer);
 
     const applyInputBaseStyle = (el) => {
-        el.style.all = "revert";
         el.style.boxSizing = "border-box";
-        el.style.fontFamily = window.ENLIGHTENKEY_FONT_FAMILY || 'Arial, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif';
-        el.style.color = "#00fe19ff";
-        el.style.background = "rgba(0,0,0,0.467)";
-        el.style.border = "1px solid rgba(255,255,255,0.2)";
-        el.style.borderRadius = "5px";
+        el.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        el.style.color = "#243b53";
+        el.style.background = "#ffffff";
+        el.style.border = "1px solid #d0d9e3";
+        el.style.borderRadius = "8px";
         el.style.outline = "none";
     };
 
     // ---- SO_temp 下拉菜单 ----
     const templateSelect = document.createElement("select");
     applyInputBaseStyle(templateSelect);
-    templateSelect.style.width = "280px";
-    templateSelect.style.height = "28px";
-    templateSelect.style.fontSize = "11px";
-    templateSelect.style.padding = "2px 2px";
-    templateSelect.style.marginBottom = "8px";
+    templateSelect.style.width = "100%";
+    templateSelect.style.height = "32px";
+    templateSelect.style.fontSize = "12px";
+    templateSelect.style.padding = "0 10px";
     templateSelect.style.cursor = "pointer";
 
     // 添加"Custom"选项
@@ -245,21 +261,20 @@ const SO_temp = {
 
     // ---- URL 模板输入框 ----
     const label1 = document.createElement("div");
-    label1.style.fontSize = "11px";
-    label1.style.marginBottom = "4px";
+    label1.style.fontSize = "12px";
     label1.textContent = "PDF path (use {doi} as placeholder):";
-    label1.style.width = "280px";
+    label1.style.width = "100%";
+    label1.style.color = "#486581";
     contentContainer.appendChild(label1);
 
     const templateInput = document.createElement("input");
     templateInput.type = "text";
     templateInput.value = savedTemplate;
     applyInputBaseStyle(templateInput);
-    templateInput.style.width = "280px";
-    templateInput.style.height = "28px";
-    templateInput.style.fontSize = "11px";
-    templateInput.style.padding = "2px 2px";
-    templateInput.style.marginBottom = "4px";
+    templateInput.style.width = "100%";
+    templateInput.style.height = "32px";
+    templateInput.style.fontSize = "12px";
+    templateInput.style.padding = "0 10px";
     contentContainer.appendChild(templateInput);
 
     // 下拉菜单变化事件
@@ -317,20 +332,19 @@ const SO_temp = {
     timeRow.appendChild(timerWrap);
 
     const timerlable = document.createElement("div");
-    timerlable.style.fontSize = "11px";
-    timerlable.style.marginBottom = "4px";
+    timerlable.style.fontSize = "12px";
     timerlable.textContent = "Download delay (ms):";
+    timerlable.style.color = "#486581";
     timerWrap.appendChild(timerlable);
 
     const timerInput = document.createElement("input");
     timerInput.type = "text";
     timerInput.value = savedTimer;
     applyInputBaseStyle(timerInput);
-    timerInput.style.width = "130px";
-    timerInput.style.height = "28px";
-    timerInput.style.fontSize = "11px";
-    timerInput.style.padding = "2px 2px";
-    timerInput.style.marginBottom = "4px";
+    timerInput.style.width = "100%";
+    timerInput.style.height = "32px";
+    timerInput.style.fontSize = "12px";
+    timerInput.style.padding = "0 10px";
     timerWrap.appendChild(timerInput);
 
     timerInput.addEventListener("change", () => {
@@ -345,20 +359,19 @@ const SO_temp = {
     timeRow.appendChild(batchWrap);
 
     const batchLabel = document.createElement("div");
-    batchLabel.style.fontSize = "11px";
-    batchLabel.style.marginBottom = "4px";
+    batchLabel.style.fontSize = "12px";
     batchLabel.textContent = "Batch interval (minutes):";
+    batchLabel.style.color = "#486581";
     batchWrap.appendChild(batchLabel);
 
     const batchInput = document.createElement("input");
     batchInput.type = "text";
     batchInput.value = savedBatchMinutes;
     applyInputBaseStyle(batchInput);
-    batchInput.style.width = "130px";
-    batchInput.style.height = "28px";
-    batchInput.style.fontSize = "11px";
-    batchInput.style.padding = "2px 2px";
-    batchInput.style.marginBottom = "4px";
+    batchInput.style.width = "100%";
+    batchInput.style.height = "32px";
+    batchInput.style.fontSize = "12px";
+    batchInput.style.padding = "0 10px";
     batchWrap.appendChild(batchInput);
 
     batchInput.addEventListener("change", () => {
@@ -369,17 +382,18 @@ const SO_temp = {
 
     // ---- 多行 DOI 输入框 ----
     const label2 = document.createElement("div");
-    label2.style.fontSize = "11px";
+    label2.style.fontSize = "12px";
     label2.textContent = "DOI list (one per line):";
     label2.style.width = "100%";
+    label2.style.color = "#486581";
     contentContainer.appendChild(label2);
 
     const textarea = document.createElement("textarea");
     applyInputBaseStyle(textarea);
-    textarea.style.width = "280px";
-    textarea.style.height = "150px";
+    textarea.style.width = "100%";
+    textarea.style.minHeight = "160px";
     textarea.style.padding = "8px";
-    textarea.style.fontSize = "9px";
+    textarea.style.fontSize = "12px";
     textarea.style.resize = "vertical"; // 只允许垂直调整大小，禁止水平调整
     textarea.style.overflowX = "hidden";
     contentContainer.appendChild(textarea);
@@ -389,13 +403,13 @@ const SO_temp = {
     selectDownloadDirBtn.textContent = downloadDirName ? `Download Folder: ${downloadDirName}` : "Choose Download Folder";
     selectDownloadDirBtn.style.height = "32px";
     selectDownloadDirBtn.style.width = "100%";
-    selectDownloadDirBtn.style.border = "none";
-    selectDownloadDirBtn.style.borderRadius = "5px";
+    selectDownloadDirBtn.style.border = "1px solid #d0d9e3";
+    selectDownloadDirBtn.style.borderRadius = "8px";
     selectDownloadDirBtn.style.cursor = "pointer";
-    selectDownloadDirBtn.style.background = "#607d8b";
-    selectDownloadDirBtn.style.color = "#fff";
-    selectDownloadDirBtn.style.fontWeight = "bold";
-    selectDownloadDirBtn.style.fontSize = "11px";
+    selectDownloadDirBtn.style.background = "#f7f9fb";
+    selectDownloadDirBtn.style.color = "#486581";
+    selectDownloadDirBtn.style.fontWeight = "600";
+    selectDownloadDirBtn.style.fontSize = "12px";
     selectDownloadDirBtn.style.boxSizing = "border-box";
     selectDownloadDirBtn.style.lineHeight = "1";
     selectDownloadDirBtn.style.padding = "0 10px";
@@ -420,13 +434,13 @@ const SO_temp = {
     syncBtn.textContent = "Sync PDFs in Folder";
     syncBtn.style.height = "32px";
     syncBtn.style.flex = "1";
-    syncBtn.style.border = "none";
-    syncBtn.style.borderRadius = "5px";
+    syncBtn.style.border = "1px solid #d0d9e3";
+    syncBtn.style.borderRadius = "8px";
     syncBtn.style.cursor = "pointer";
-    syncBtn.style.background = "#3c9eff";
-    syncBtn.style.color = "#fff";
-    syncBtn.style.fontWeight = "bold";
-    syncBtn.style.fontSize = "11px";
+    syncBtn.style.background = "#f7f9fb";
+    syncBtn.style.color = "#486581";
+    syncBtn.style.fontWeight = "600";
+    syncBtn.style.fontSize = "12px";
     syncBtn.style.boxSizing = "border-box";
     syncBtn.style.lineHeight = "1";
     syncBtn.style.padding = "0 10px";
@@ -442,13 +456,13 @@ const SO_temp = {
     extractBtn.textContent = "Extract from Text";
     extractBtn.style.height = "32px";
     extractBtn.style.flex = "1";
-    extractBtn.style.border = "none";
-    extractBtn.style.borderRadius = "5px";
+    extractBtn.style.border = "1px solid #d0d9e3";
+    extractBtn.style.borderRadius = "8px";
     extractBtn.style.cursor = "pointer";
-    extractBtn.style.background = "#5ad18c";
-    extractBtn.style.color = "#fff";
-    extractBtn.style.fontWeight = "bold";
-    extractBtn.style.fontSize = "11px";
+    extractBtn.style.background = "#f7f9fb";
+    extractBtn.style.color = "#486581";
+    extractBtn.style.fontWeight = "600";
+    extractBtn.style.fontSize = "12px";
     extractBtn.style.boxSizing = "border-box";
     extractBtn.style.lineHeight = "1";
     extractBtn.style.padding = "0 10px";
@@ -465,12 +479,13 @@ const SO_temp = {
     btn.textContent = "Download";
     btn.style.height = "32px";
     btn.style.width = "100%";
-    btn.style.border = "none";
-    btn.style.borderRadius = "5px";
+    btn.style.border = "1px solid #123a5c";
+    btn.style.borderRadius = "8px";
     btn.style.cursor = "pointer";
-    btn.style.background = "#00fe19ff";
+    btn.style.background = "#174b78";
     btn.style.color = "#fff";
-    btn.style.fontWeight = "bold";
+    btn.style.fontWeight = "600";
+    btn.style.fontSize = "12px";
     btn.style.boxSizing = "border-box";
     btn.style.lineHeight = "1";
     btn.style.padding = "0 10px";
@@ -485,7 +500,7 @@ const SO_temp = {
     const cooldownDiv = document.createElement("div");
     cooldownDiv.style.minHeight = "16px";
     cooldownDiv.style.fontSize = "12px";
-    cooldownDiv.style.color = "#ffce00";
+    cooldownDiv.style.color = "#486581";
     cooldownDiv.style.width = "100%";
     contentContainer.appendChild(cooldownDiv);
 
@@ -494,7 +509,7 @@ const SO_temp = {
     logDiv.style.maxHeight = "150px";
     logDiv.style.overflowY = "auto";
     logDiv.style.fontSize = "12px";
-    logDiv.style.borderTop = "1px solid #666";
+    logDiv.style.borderTop = "1px solid #dde4ec";
     logDiv.style.paddingTop = "6px";
     logDiv.style.width = "100%";
     logDiv.style.boxSizing = "border-box";
@@ -504,7 +519,7 @@ const SO_temp = {
         console.log(msg);
         const div = document.createElement("div");
         div.textContent = msg;
-        div.style.color = "#00fe19ff";
+        div.style.color = "#243b53";
         logDiv.innerHTML = div.outerHTML;
         logDiv.scrollTop = logDiv.scrollHeight;
     }
