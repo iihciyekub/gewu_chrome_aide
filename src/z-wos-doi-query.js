@@ -183,6 +183,7 @@ window.wosids = [];
     const POSITION_LEFT_KEY = "clipboard-reader-box-left";
     const WIDTH_KEY = "clipboard-reader-box-width";
     const HEIGHT_KEY = "clipboard-reader-box-height";
+    const COLLAPSED_KEY = "clipboard-reader-box-collapsed";
     const HISTORY_KEY = "clipboard-reader-box-history";
     const WOS_QUERY_HISTORY_KEY = "wos-query-builder-history";
     const EASYSCHOLAR_VERIFIED_KEY = "wos-easyscholar-api-key-verified";
@@ -202,6 +203,8 @@ window.wosids = [];
     const savedLeft = readStorage(POSITION_LEFT_KEY, null);
     const savedWidth = readStorage(WIDTH_KEY, "260px");
     const savedHeight = readStorage(HEIGHT_KEY, "520px");
+    const savedCollapsed = readStorage(COLLAPSED_KEY, "false") === "true";
+    const COLLAPSED_HEIGHT = 40;
 
     // 历史记录管理
     let queryHistory = [];
@@ -334,7 +337,7 @@ window.wosids = [];
         defaultLeft: window.innerWidth - 360,
         width: initialWidth,
         height: initialHeight,
-        margin: 8
+        margin: 0
     });
     box.style.top = `${Math.round(top)}px`;
     box.style.left = `${Math.round(left)}px`;
@@ -350,9 +353,9 @@ window.wosids = [];
     box.style.border = "none";
     box.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.10)";
     box.style.width = `${initialWidth}px`;
-    box.style.height = `${initialHeight}px`;
+    box.style.height = `${savedCollapsed ? COLLAPSED_HEIGHT : initialHeight}px`;
     box.style.minWidth = "260px";
-    box.style.minHeight = "320px";
+    box.style.minHeight = `${savedCollapsed ? COLLAPSED_HEIGHT : 320}px`;
     box.style.overflow = "hidden";
 
     // 控制栏（标题和拖动按钮）
@@ -383,6 +386,20 @@ window.wosids = [];
     titleBtnGroup.style.alignItems = "center";
     titleBtnGroup.style.gap = "4px";
 
+    const collapseBtn = document.createElement("button");
+    collapseBtn.innerHTML = `<i class="fa-solid fa-chevron-up"></i>`;
+    collapseBtn.style.background = "transparent";
+    collapseBtn.style.border = "1px solid rgba(255,255,255,0.20)";
+    collapseBtn.style.color = "#fff";
+    collapseBtn.style.fontSize = "11px";
+    collapseBtn.style.cursor = "pointer";
+    collapseBtn.style.padding = "2px 6px";
+    collapseBtn.style.borderRadius = "4px";
+    collapseBtn.style.display = "inline-flex";
+    collapseBtn.style.alignItems = "center";
+    collapseBtn.style.justifyContent = "center";
+    collapseBtn.title = "Collapse panel";
+
     const copySidBtn = document.createElement("button");
     copySidBtn.innerHTML = `<i class="fa-solid fa-copy"></i><span style="margin-left:4px;">SID</span>`;
     copySidBtn.style.background = "transparent";
@@ -396,6 +413,7 @@ window.wosids = [];
     copySidBtn.style.alignItems = "center";
     copySidBtn.style.justifyContent = "center";
     copySidBtn.title = "Copy SID";
+    let copySidRestoreTimer = null;
 
     copySidBtn.onclick = async () => {
         const sid = String(window?.wos?.SID || window?.sessionData?.BasicProperties?.SID || '').trim();
@@ -406,11 +424,15 @@ window.wosids = [];
 
         try {
             await navigator.clipboard.writeText(sid);
-            const oldHtml = copySidBtn.innerHTML;
-            copySidBtn.innerHTML = `<i class="fa-solid fa-check"></i><span style="margin-left:4px;">SID</span>`;
-            setTimeout(() => {
-                copySidBtn.innerHTML = oldHtml;
-            }, 1200);
+            if (copySidRestoreTimer) {
+                clearTimeout(copySidRestoreTimer);
+                copySidRestoreTimer = null;
+            }
+            copySidBtn.innerHTML = `<i class="fa-solid fa-circle-check"></i><span style="margin-left:4px;">SID</span>`;
+            copySidRestoreTimer = setTimeout(() => {
+                copySidBtn.innerHTML = `<i class="fa-solid fa-copy"></i><span style="margin-left:4px;">SID</span>`;
+                copySidRestoreTimer = null;
+            }, 2000);
         } catch (error) {
             alert('Failed to copy SID.');
         }
@@ -430,6 +452,7 @@ window.wosids = [];
     // onclick 将在后面定义
 
     controlRow.appendChild(title);
+    titleBtnGroup.appendChild(collapseBtn);
     titleBtnGroup.appendChild(copySidBtn);
     titleBtnGroup.appendChild(closeBtn);
     controlRow.appendChild(titleBtnGroup);
@@ -500,6 +523,30 @@ window.wosids = [];
     tabContentWrap.style.padding = '8px';
     tabContentWrap.style.paddingTop = '4px';
     tabContentWrap.style.overflow = 'auto';
+
+    let resizeHandle = null;
+    let isCollapsed = savedCollapsed;
+    let expandedHeightPx = initialHeight;
+
+    const applyCollapsedState = () => {
+        tabRow.style.display = isCollapsed ? 'none' : 'flex';
+        tabContentWrap.style.display = isCollapsed ? 'none' : 'flex';
+        box.style.height = `${Math.round(isCollapsed ? COLLAPSED_HEIGHT : expandedHeightPx)}px`;
+        box.style.minHeight = `${isCollapsed ? COLLAPSED_HEIGHT : 320}px`;
+        controlRow.style.borderRadius = isCollapsed ? '2px' : '2px 2px 0 0';
+        collapseBtn.innerHTML = isCollapsed
+            ? `<i class="fa-solid fa-chevron-down"></i>`
+            : `<i class="fa-solid fa-chevron-up"></i>`;
+        collapseBtn.title = isCollapsed ? 'Expand panel' : 'Collapse panel';
+        if (resizeHandle) {
+            resizeHandle.style.display = isCollapsed ? 'none' : 'block';
+        }
+        writeStorage(COLLAPSED_KEY, String(isCollapsed));
+        if (!isCollapsed) {
+            writeStorage(HEIGHT_KEY, box.style.height);
+        }
+        ensurePanelInView();
+    };
 
     const queryTabPanel = document.createElement('div');
     queryTabPanel.style.display = 'flex';
@@ -687,7 +734,7 @@ window.wosids = [];
 
     ensureEasyScholarMounted();
 
-    const resizeHandle = document.createElement("div");
+    resizeHandle = document.createElement("div");
     resizeHandle.style.position = "absolute";
     resizeHandle.style.right = "0";
     resizeHandle.style.bottom = "0";
@@ -696,6 +743,7 @@ window.wosids = [];
     resizeHandle.style.cursor = "nwse-resize";
     resizeHandle.style.background = "linear-gradient(135deg, transparent 0 42%, rgba(23,75,120,0.45) 42% 54%, transparent 54% 66%, rgba(23,75,120,0.45) 66% 78%, transparent 78%)";
     resizeHandle.style.userSelect = "none";
+    applyCollapsedState();
 
     // 内容容器
     const contentBox = document.createElement("div");
@@ -1831,6 +1879,15 @@ Additional output rules:
         cleanup();
     };
 
+    collapseBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (!isCollapsed) {
+            expandedHeightPx = Math.max(320, box.offsetHeight);
+        }
+        isCollapsed = !isCollapsed;
+        applyCollapsedState();
+    };
+
     // 使用全局自由拖动功能
     dragger = window.createFreeDragger(box, controlRow, {
         topKey: POSITION_TOP_KEY,
@@ -1845,7 +1902,7 @@ Additional output rules:
         let startHeight = 0;
 
         const onResizeMouseMove = (e) => {
-            if (!isResizing) return;
+            if (!isResizing || isCollapsed) return;
             const nextWidth = Math.min(
                 Math.max(260, startWidth + (e.clientX - startX)),
                 window.innerWidth - 16
@@ -1856,6 +1913,7 @@ Additional output rules:
             );
             box.style.width = `${Math.round(nextWidth)}px`;
             box.style.height = `${Math.round(nextHeight)}px`;
+            expandedHeightPx = Math.round(nextHeight);
         };
 
         const onResizeMouseUp = () => {
@@ -1872,7 +1930,7 @@ Additional output rules:
             startX = e.clientX;
             startY = e.clientY;
             startWidth = box.offsetWidth;
-            startHeight = box.offsetHeight;
+            startHeight = expandedHeightPx;
             document.body.style.userSelect = "none";
             e.preventDefault();
             e.stopPropagation();
@@ -1890,7 +1948,7 @@ Additional output rules:
         };
     }
 
-    const ensurePanelInView = () => {
+    function ensurePanelInView() {
         const width = box.offsetWidth || 350;
         const height = box.offsetHeight || 320;
         const currentTop = box.style.top || savedTop;
@@ -1902,14 +1960,14 @@ Additional output rules:
             defaultLeft: window.innerWidth - 360,
             width,
             height,
-            margin: 8
+            margin: 0
         });
         box.style.top = `${Math.round(clamped.top)}px`;
         box.style.left = `${Math.round(clamped.left)}px`;
         box.style.right = "auto";
         writeStorage(POSITION_TOP_KEY, box.style.top);
         writeStorage(POSITION_LEFT_KEY, box.style.left);
-    };
+    }
 
     ensurePanelInView();
 

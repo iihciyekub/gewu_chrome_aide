@@ -576,6 +576,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // ========== 初始化：根据存储的状态自动加载模块 ==========
 
+const isWosPage = () => /(^|\.)webofscience\.com$/i.test(window.location.hostname || '');
+
+if (isWosPage()) {
+  injectModule('wosDoiQuery');
+  setTimeout(() => {
+    setModuleVisibility('wosDoiQuery', true);
+  }, 100);
+}
+
 chrome.storage.local.get(['easyscholarEnabled'], result => {
   if (result.easyscholarEnabled) {
     setModuleVisibility('easyscholar', true);
