@@ -1573,8 +1573,38 @@ window.wosids = [];
         return text;
     };
 
+    const buildStrictWosQueryPrompt = (basePrompt) => `${basePrompt}
+
+Additional output rules:
+1. Return JSON only. Do not return markdown, code fences, or explanation text.
+2. The JSON shape must be {"wos_query":[{"rowText":"..."}]}.
+3. If rowText contains an OG=(...) segment, replace the standalone word "and" inside the parentheses with "&".
+4. Do not change "and" outside OG=(...).`;
+
+    const normalizeOgAndOperators = (rowText) => String(rowText || '').replace(/OG=\(([^)]*)\)/gi, (_match, inner) => {
+        const normalizedInner = inner
+            .replace(/\band\b/gi, '&')
+            .replace(/\s*&\s*/g, ' & ')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+        return `OG=(${normalizedInner})`;
+    });
+
+    const extractJsonText = (rawText) => {
+        const text = String(rawText || '').trim();
+        if (!text) {
+            return '';
+        }
+        const codeBlockMatch = text.match(/```(?:wosquery|json)?\s*([\s\S]*?)```/i);
+        if (codeBlockMatch?.[1]) {
+            return codeBlockMatch[1].trim();
+        }
+        const objectMatch = text.match(/\{[\s\S]*\}/);
+        return objectMatch ? objectMatch[0].trim() : text;
+    };
+
     const buildOpenAIWosQueryPayload = async (text, model) => {
-        const systemPrompt = await loadPrompt();
+        const systemPrompt = buildStrictWosQueryPrompt(await loadPrompt());
         return {
             'model': model || 'gpt-4o-mini',
             'input': [
@@ -1647,10 +1677,11 @@ window.wosids = [];
     };
 
     const extractRowTextFromResult = async (rawText) => {
-        const codeBlockMatch = rawText.match(/```(?:wosquery|json)?\s*([\s\S]*?)```/i);
-        const jsonText = (codeBlockMatch ? codeBlockMatch[1] : rawText).trim();
+        const jsonText = extractJsonText(rawText);
         const parsedResult = JSON.parse(jsonText);
-        const rowText = parsedResult?.wos_query?.[0]?.rowText || parsedResult?.[0]?.rowText;
+        const rowText = normalizeOgAndOperators(
+            parsedResult?.wos_query?.[0]?.rowText || parsedResult?.[0]?.rowText || parsedResult?.rowText
+        );
         if (rowText && window.wos && typeof window.wos.query === 'function') {
             await window.wos.query(rowText);
         } else if (!rowText) {
@@ -1661,7 +1692,7 @@ window.wosids = [];
 
     const runWosQueryByProvider = async (text) => {
         const provider = (await requestStorage("get", WOS_QUERY_PROVIDER_STORAGE_KEY)) || 'openai';
-        const systemPrompt = await loadPrompt();
+        const systemPrompt = buildStrictWosQueryPrompt(await loadPrompt());
 
         if (provider === 'lmstudio') {
             const baseUrl = (await requestStorage("get", LM_STUDIO_BASE_URL_STORAGE_KEY)) || 'http://127.0.0.1:1234/v1';

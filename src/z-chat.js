@@ -7,12 +7,8 @@
 window.openai_api_key = "";
 window.openai_chat_model = "gpt-4o-mini";
 
-// Single mode
-const MODE_LABEL = "any chat";
-
 const PROMPT_PATHS = {
     wosQuery: 'prompts/wos-query.md',
-    anyChat: 'prompts/any-chat.md',
 };
 
 const PROMPT_CACHE = new Map();
@@ -64,7 +60,14 @@ async function _loadPrompt(key) {
  */
 
 async function _wos_query_parse(text) {
-    const systemPrompt = await _loadPrompt('wosQuery');
+    const basePrompt = await _loadPrompt('wosQuery');
+    const systemPrompt = `${basePrompt}
+
+Additional output rules:
+1. Return JSON only. Do not return markdown, code fences, or explanation text.
+2. The JSON shape must be {"wos_query":[{"rowText":"..."}]}.
+3. If rowText contains an OG=(...) segment, replace the standalone word "and" inside the parentheses with "&".
+4. Do not change "and" outside OG=(...).`;
     return {
         "model": window.openai_chat_model || "gpt-4o-mini",
         'input': [
@@ -100,49 +103,6 @@ async function _wos_query_parse(text) {
         "store": false,
     }
 }
-
-
-async function _any_chat(text) {
-    const systemPrompt = await _loadPrompt('anyChat');
-    const selectedModel = window.openai_chat_model || "gpt-4o-mini";
-    const supportsSampling = !/^gpt-5/i.test(selectedModel);
-    return {
-        "model": selectedModel,
-        "input": [
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": systemPrompt
-                    }
-                ]
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "input_text",
-                        'text': `${text}`
-                    }
-                ]
-            }
-        ],
-        "text": {
-            "format": {
-                "type": "text"
-            }
-        },
-        "tools": [],
-        ...(supportsSampling ? { "temperature": 0.2 } : {}),
-        "max_output_tokens": 1024,
-        ...(supportsSampling ? { "top_p": 0.85 } : {}),
-        "store": false,
-    }
-}
-
-
-
 /**
  * 封装的 OpenAI API 调用函数
  * @param {Object} jsonData - 要发送的 JSON 数据
@@ -178,6 +138,40 @@ async function callOpenAI(jsonData) {
     }
 }
 
+function normalizeOgAndOperators(rowText) {
+    return String(rowText || '').replace(/OG=\(([^)]*)\)/gi, (_match, inner) => {
+        const normalizedInner = inner
+            .replace(/\band\b/gi, '&')
+            .replace(/\s*&\s*/g, ' & ')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+        return `OG=(${normalizedInner})`;
+    });
+}
+
+function extractJsonText(rawText) {
+    const text = String(rawText || '').trim();
+    if (!text) {
+        return '';
+    }
+    const codeBlockMatch = text.match(/```(?:wosquery|json)?\s*([\s\S]*?)```/i);
+    if (codeBlockMatch?.[1]) {
+        return codeBlockMatch[1].trim();
+    }
+    const objectMatch = text.match(/\{[\s\S]*\}/);
+    return objectMatch ? objectMatch[0].trim() : text;
+}
+
+function extractNormalizedRowText(rawText) {
+    const jsonText = extractJsonText(rawText);
+    if (!jsonText) {
+        return null;
+    }
+    const parsedResult = JSON.parse(jsonText);
+    const rowText = parsedResult?.wos_query?.[0]?.rowText || parsedResult?.[0]?.rowText || parsedResult?.rowText;
+    return rowText ? normalizeOgAndOperators(rowText) : null;
+}
+
 function extractResponseText(result) {
     if (!result) return '';
     if (typeof result.output_text === 'string' && result.output_text) {
@@ -200,74 +194,6 @@ function extractResponseText(result) {
     return '';
 }
 
-/**
- * 流式调用 OpenAI API
- * @param {Object} jsonData - 要发送的 JSON 数据
- * @param {Function} onChunk - 接收流式数据块的回调函数
- * @returns {Promise<string>} - 完整的响应文本
- */
-async function callOpenAIStream(jsonData, onChunk) {
-    try {
-        const response = await fetch('https://api.openai.com/v1/responses', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${window.openai_api_key}`
-            },
-            body: JSON.stringify({...jsonData, stream: true})
-        });
-
-        if (!response.ok) {
-            console.error(`API request failed with status: ${response.status}`);
-            const errorText = await response.text();
-            throw new Error(`API Error: ${response.status} - ${errorText}`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullText = '';
-
-        while (true) {
-            const {done, value} = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, {stream: true});
-            const lines = chunk.split('\n');
-
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const data = line.slice(6);
-                    if (data === '[DONE]') continue;
-                    
-                    try {
-                        const parsed = JSON.parse(data);
-                        const content = parsed.delta ||
-                            parsed.output_text?.delta ||
-                            parsed.output?.[0]?.content?.[0]?.text ||
-                            parsed.choices?.[0]?.delta?.content || '';
-                        if (content) {
-                            fullText += content;
-                            if (onChunk) onChunk(content);
-                        }
-                    } catch (e) {
-                        // Skip invalid JSON lines
-                    }
-                }
-            }
-        }
-
-        return fullText;
-    } catch (error) {
-        console.error('Error calling OpenAI API (stream):', error);
-        throw error;
-    }
-}
-
-
-
-
-
-
 // 使用示例
 async function openai_api_chat_query(text = '') {
     let jsonData;
@@ -279,13 +205,9 @@ async function openai_api_chat_query(text = '') {
     }
     const result = await callOpenAI(jsonData);
     if (result) {
-        const res = result.output[0].content[0].text
         try {
-            const rawText = result.output[0].content[0].text || "";
-            const codeBlockMatch = rawText.match(/```(?:wosquery|json)?\s*([\s\S]*?)```/i);
-            const jsonText = (codeBlockMatch ? codeBlockMatch[1] : rawText).trim();
-            const parsedResult = JSON.parse(jsonText);
-            const rowText = parsedResult?.wos_query?.[0]?.rowText || parsedResult?.[0]?.rowText;
+            const rawText = extractResponseText(result);
+            const rowText = extractNormalizedRowText(rawText);
             if (rowText) {
                 const queryJson = encodeURIComponent(JSON.stringify([{ rowText }]));
                 const queryUrl = `/wos/woscc/general-summary?queryJson=${queryJson}`;
@@ -306,128 +228,6 @@ async function openai_api_chat_query(text = '') {
 
 // 导出函数到全局作用域，供其他模块使用
 window.openai_api_chat_query = openai_api_chat_query;
-
-
-
-
-
-
-async function chat(text = '') {
-    let jsonData;
-    try {
-        jsonData = await _any_chat(text);
-    } catch (e) {
-        console.error('[OpenAI Chat] Failed to load chat prompt:', e);
-        return null;
-    }
-
-    // Get or create chat history container
-    const chatHistoryContainer = document.getElementById('chat-history-container');
-    if (!chatHistoryContainer) {
-        console.error('[OpenAI Chat] Chat history container not found');
-        return null;
-    }
-
-    // Show chat history container in chat mode
-    chatHistoryContainer.style.display = 'flex';
-    console.log('[OpenAI Chat] Chat history container displayed');
-
-    // Add user message bubble
-    const userBubble = createChatBubble(text, 'user');
-    chatHistoryContainer.appendChild(userBubble);
-    chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
-    console.log('[OpenAI Chat] User message added:', text);
-
-    // Create assistant message bubble
-    const assistantBubble = createChatBubble('Processing...', 'assistant');
-    chatHistoryContainer.appendChild(assistantBubble);
-    const assistantText = assistantBubble.querySelector('.chat-bubble-text');
-    chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
-
-    try {
-        console.log('[OpenAI Chat] Attempting streaming API...');
-        let fullResponse = '';
-        let hasContent = false;
-        let rafId = null;
-        const scheduleRender = () => {
-            if (rafId) return;
-            rafId = requestAnimationFrame(() => {
-                assistantText.textContent = fullResponse;
-                chatHistoryContainer.scrollTop = chatHistoryContainer.scrollHeight;
-                rafId = null;
-            });
-        };
-
-        await callOpenAIStream(jsonData, (chunk) => {
-            if (!hasContent) {
-                hasContent = true;
-                assistantText.textContent = ''; // Clear "Processing..."
-            }
-            fullResponse += chunk;
-            scheduleRender();
-        });
-
-        if (fullResponse) {
-            console.log('[OpenAI Chat] Streaming response received:', fullResponse);
-            return fullResponse;
-        }
-
-        throw new Error('Empty streaming response');
-    } catch (error) {
-        console.error('[OpenAI Chat] Failed to get chat response:', error);
-        assistantText.textContent = `Error: ${error.message || 'Failed to get response'}`;
-        assistantText.style.color = '#ff6b6b';
-        return null;
-    }
-};
-
-
-/**
- * Create a chat bubble element
- * @param {string} text - The message text
- * @param {string} role - 'user' or 'assistant'
- * @returns {HTMLElement} - The chat bubble element
- */
-function createChatBubble(text, role) {
-    const bubble = document.createElement('div');
-    bubble.className = `chat-bubble chat-bubble-${role}`;
-    bubble.style.display = 'flex';
-    bubble.style.flexDirection = 'column';
-    bubble.style.gap = '4px';
-    bubble.style.alignItems = role === 'user' ? 'flex-end' : 'flex-start';
-
-    const header = document.createElement('div');
-    header.style.fontSize = '11px';
-    header.style.color = 'rgba(255,255,255,0.6)';
-    header.style.fontWeight = 'bold';
-    header.textContent = role === 'user' ? 'You' : 'AI Assistant';
-
-    const textContainer = document.createElement('div');
-    textContainer.className = 'chat-bubble-text';
-    textContainer.style.padding = '8px 12px';
-    textContainer.style.borderRadius = '8px';
-    textContainer.style.maxWidth = '85%';
-    textContainer.style.wordWrap = 'break-word';
-    textContainer.style.fontSize = '13px';
-    textContainer.style.lineHeight = '1.5';
-    textContainer.style.whiteSpace = 'pre-wrap';
-    
-    if (role === 'user') {
-        textContainer.style.background = 'rgba(0, 122, 204, 0.8)';
-        textContainer.style.color = '#fff';
-    } else {
-        textContainer.style.background = 'rgba(76, 175, 80, 0.2)';
-        textContainer.style.color = '#fff';
-        textContainer.style.border = '1px solid rgba(76, 175, 80, 0.3)';
-    }
-    
-    textContainer.textContent = text;
-
-    bubble.appendChild(header);
-    bubble.appendChild(textContainer);
-
-    return bubble;
-}
 
 
 
@@ -488,7 +288,6 @@ function createChatBubble(text, role) {
     const MODEL_UPDATE_EVENT = "__ENLIGHTENKEY_CHAT_MODEL_UPDATE__";
     const MODEL_SYNC_EVENT = "__ENLIGHTENKEY_CHAT_MODEL_SYNC__";
     const VISIBILITY_EVENT = "__OPENAI_CHAT_VISIBILITY__";
-    const HISTORY_KEY = "wos-openai-panel-history";
     const FONT_AWESOME_ID = "enlightenkey-fontawesome";
     const FONT_AWESOME_FALLBACK = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css";
 
@@ -496,7 +295,6 @@ function createChatBubble(text, role) {
     const savedLeft = localStorage.getItem(POSITION_LEFT_KEY) || null;
     const savedWidth = localStorage.getItem(WIDTH_KEY) || "500px";
     const savedVisible = localStorage.getItem(VISIBILITY_KEY);
-    const savedHistory = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
 
     const requestApiKeyFromChromeStorage = () => new Promise((resolve) => {
         const requestId = `chat-api-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -622,7 +420,7 @@ function createChatBubble(text, role) {
     ensureFontAwesome();
 
     // History management
-    let inputHistory = savedHistory;
+    let inputHistory = [];
     let historyIndex = -1;
     let currentInput = "";
 
@@ -661,22 +459,10 @@ function createChatBubble(text, role) {
     controlRow.style.borderRadius = "8px 8px 0 0";
 
     const title = document.createElement("span");
-    title.textContent = "OpenAI Chat";
+    title.textContent = "WOS Query";
     title.style.color = "#fff";
     title.style.fontSize = "14px";
     title.style.fontWeight = "bold";
-
-    const modeLabel = document.createElement("span");
-    modeLabel.textContent = MODE_LABEL;
-    modeLabel.style.color = "#4CAF50";
-    modeLabel.style.fontSize = "12px";
-    modeLabel.style.fontWeight = "bold";
-    modeLabel.style.padding = "2px 8px";
-    modeLabel.style.background = "rgba(76, 175, 80, 0.2)";
-    modeLabel.style.borderRadius = "4px";
-    modeLabel.style.whiteSpace = "nowrap";
-    modeLabel.style.marginLeft = "auto";
-    modeLabel.style.cursor = "default";
 
     const btnGroup = document.createElement("div");
     btnGroup.style.display = "flex";
@@ -704,7 +490,7 @@ function createChatBubble(text, role) {
     btnGroup.appendChild(closeBtn);
 
     controlRow.appendChild(title);
-    controlRow.appendChild(modeLabel);
+    controlRow.appendChild(document.createElement("div")).style.marginLeft = "auto";
     controlRow.appendChild(btnGroup);
 
     // 使用全局拖动方法
@@ -727,7 +513,7 @@ function createChatBubble(text, role) {
     row3.style.gap = "6px";
 
     const chatLabel = document.createElement("span");
-    chatLabel.textContent = "Chat:";
+    chatLabel.textContent = "Query:";
     chatLabel.style.color = "#fff";
     chatLabel.style.fontSize = "13px";
     chatLabel.style.fontWeight = "bold";
@@ -738,7 +524,7 @@ function createChatBubble(text, role) {
     chatInputRow.style.alignItems = "stretch";
 
     const chatInput = document.createElement("textarea");
-    chatInput.placeholder = "Type your message here... (Enter for new line, ↑↓ for history)";
+    chatInput.placeholder = "Describe the WOS query you want... (↑↓ for history)";
     chatInput.style.width = "100%";
     chatInput.style.minHeight = "50px";
     chatInput.style.border = "none";
@@ -775,16 +561,16 @@ function createChatBubble(text, role) {
         }
 
         // Save to history
+        inputHistory = inputHistory.filter(item => item !== message);
         inputHistory.push(message);
         if (inputHistory.length > 20) {
             inputHistory.shift();
         }
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(inputHistory));
         historyIndex = -1;
         currentInput = "";
 
         // Update status bar
-        statusBar.textContent = "Sending chat request...";
+        statusBar.textContent = "Generating WOS query...";
         statusBar.style.background = "#FFA500";
 
         isSending = true;
@@ -793,8 +579,8 @@ function createChatBubble(text, role) {
         sendBtn.style.opacity = "0.7";
 
         try {
-            await chat(message);
-            statusBar.textContent = "Chat response received";
+            await openai_api_chat_query(message);
+            statusBar.textContent = "WOS query executed";
             statusBar.style.background = "#16825D";
         } catch (error) {
             statusBar.textContent = `Error: ${error.message || 'Request failed'}`;
@@ -864,20 +650,6 @@ function createChatBubble(text, role) {
     chatInputRow.appendChild(sendBtn);
     row3.appendChild(chatInputRow);
 
-    // Chat history display area
-    const chatHistoryContainer = document.createElement("div");
-    chatHistoryContainer.id = "chat-history-container";
-    chatHistoryContainer.style.display = "none"; // Initially hidden, show when in chat mode
-    chatHistoryContainer.style.flexDirection = "column";
-    chatHistoryContainer.style.gap = "8px";
-    chatHistoryContainer.style.maxHeight = "400px";
-    chatHistoryContainer.style.overflowY = "auto";
-    chatHistoryContainer.style.padding = "8px";
-    chatHistoryContainer.style.background = "rgba(255,255,255,0.05)";
-    chatHistoryContainer.style.borderRadius = "5px";
-    chatHistoryContainer.style.marginTop = "8px";
-
-    contentBox.appendChild(chatHistoryContainer);
     contentBox.appendChild(row3);
 
     // Status bar (VSCode style)
@@ -896,11 +668,6 @@ function createChatBubble(text, role) {
     box.appendChild(controlRow);
     box.appendChild(contentBox);
     box.appendChild(statusBar);
-
-    // Always show chat history container in any chat mode
-    if (chatHistoryContainer) {
-        chatHistoryContainer.style.display = "flex";
-    }
 
     document.body.appendChild(box);
 
