@@ -59,7 +59,6 @@
         "z-chat.js",
         "chatgpt-prompts-quickload.js",
         "prompts/wos-query.md",
-        "prompts/any-chat.md",
         "module-bridge.js",
         "webfonts/*.woff2",
         "webfonts/*.ttf"

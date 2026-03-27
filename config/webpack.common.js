@@ -19,7 +19,7 @@ const common = {
     // clean build folder before emitting new files
     clean: true,
   },
-  devtool: 'source-map',
+  devtool: false,
   stats: {
     all: false,
     errors: true,
