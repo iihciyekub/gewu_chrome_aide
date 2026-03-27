@@ -117,7 +117,7 @@ const MODULES = {
   wosDoiQuery: {
     id: 'wosDoiQuery',
     name: 'DOI Batch Query',
-    files: ['pub-fun.js', 'z-wos-doi-query.js'],
+    files: ['pub-fun.js', 'z-easyscholar.js', 'z-wos-doi-query.js'],
     elementId: 'clipboard-reader-box',
     visibilityKey: 'clipboard-reader-box-visible',
     enabledKey: 'wosDoiQueryEnabled',
@@ -335,27 +335,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'OPEN_EASYSCHOLAR') {
-    const element = document.getElementById(MODULES.easyscholar.elementId);
+    const element = document.getElementById(MODULES.wosDoiQuery.elementId);
+    const switchToJournalTab = () => {
+      document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
+        detail: { tab: 'journal' }
+      }));
+    };
+
     if (element) {
       element.style.display = 'flex';
+      setModuleVisibility('wosDoiQuery', true);
       setModuleVisibility('easyscholar', true);
+      switchToJournalTab();
       sendResponse({ success: true, action: 'shown' });
       return true;
     }
 
-    // 注入模块，然后等待一个短暂的时间再发送可见性事件
-    injectModule('easyscholar');
+    injectModule('wosDoiQuery');
     setTimeout(() => {
+      setModuleVisibility('wosDoiQuery', true);
       setModuleVisibility('easyscholar', true);
+      switchToJournalTab();
     }, 100);
     sendResponse({ success: true, action: 'injected' });
     return true;
   }
 
   if (request.type === 'CLOSE_EASYSCHOLAR') {
-    const element = document.getElementById(MODULES.easyscholar.elementId);
+    const element = document.getElementById(MODULES.wosDoiQuery.elementId);
     if (element) {
       element.remove();
+      const easyScholarElement = document.getElementById(MODULES.easyscholar.elementId);
+      if (easyScholarElement) {
+        easyScholarElement.remove();
+      }
+      setModuleVisibility('wosDoiQuery', false);
       setModuleVisibility('easyscholar', false);
       sendResponse({ success: true, action: 'removed' });
       return true;
@@ -366,20 +380,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'TOGGLE_EASYSCHOLAR_PANEL') {
-    const element = document.getElementById(MODULES.easyscholar.elementId);
+    const element = document.getElementById(MODULES.wosDoiQuery.elementId);
     if (element) {
       const isVisible = element.style.display !== 'none';
       const nextVisible = !isVisible;
       element.style.display = nextVisible ? 'flex' : 'none';
+      if (nextVisible) {
+        document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
+          detail: { tab: 'journal' }
+        }));
+      }
+      setModuleVisibility('wosDoiQuery', nextVisible);
       setModuleVisibility('easyscholar', nextVisible);
       sendResponse({ success: true, visible: nextVisible });
       return true;
     }
 
-    // 注入模块，然后等待一个短暂的时间再发送可见性事件
-    injectModule('easyscholar');
+    injectModule('wosDoiQuery');
     setTimeout(() => {
+      setModuleVisibility('wosDoiQuery', true);
       setModuleVisibility('easyscholar', true);
+      document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
+        detail: { tab: 'journal' }
+      }));
     }, 100);
     sendResponse({ success: true, visible: true, action: 'injected' });
     return true;
@@ -393,10 +416,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'OPEN_WOS_DOI_QUERY') {
+    const switchTab = () => {
+      if (!request.preferredTab) {
+        return;
+      }
+      document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
+        detail: { tab: request.preferredTab }
+      }));
+    };
+
     const element = document.getElementById(MODULES.wosDoiQuery.elementId);
     if (element) {
       element.style.display = 'flex';
       setModuleVisibility('wosDoiQuery', true);
+      switchTab();
       sendResponse({ success: true, action: 'shown' });
       return true;
     }
@@ -405,6 +438,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     injectModule('wosDoiQuery');
     setTimeout(() => {
       setModuleVisibility('wosDoiQuery', true);
+      switchTab();
     }, 100);
     sendResponse({ success: true, action: 'injected' });
     return true;
@@ -414,11 +448,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const element = document.getElementById(MODULES.wosDoiQuery.elementId);
     if (element) {
       element.remove();
+      const easyScholarElement = document.getElementById(MODULES.easyscholar.elementId);
+      if (easyScholarElement) {
+        easyScholarElement.remove();
+      }
       setModuleVisibility('wosDoiQuery', false);
+      setModuleVisibility('easyscholar', false);
       sendResponse({ success: true, action: 'removed' });
       return true;
     }
     setModuleVisibility('wosDoiQuery', false);
+    setModuleVisibility('easyscholar', false);
     sendResponse({ success: true, action: 'noop' });
     return true;
   }

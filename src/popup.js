@@ -5,7 +5,11 @@ import './popup.css';
 (function() {
   const CHAT_API_KEY_STORAGE_KEY = 'wosOpenaiApiKey';
   const CHAT_MODEL_STORAGE_KEY = 'wosOpenaiChatModel';
+  const EASYSCHOLAR_API_KEY_STORAGE_KEY = 'wos-easyscholar-api-key';
+  const EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY = 'wos-easyscholar-api-key-verified';
   const OPENAI_SETTINGS_COLLAPSED_KEY = 'wosOpenaiSettingsCollapsed';
+  const EASYSCHOLAR_SETTINGS_COLLAPSED_KEY = 'wosEasyScholarSettingsCollapsed';
+  const EASYSCHOLAR_API_KEY_SYNC_EVENT = '__EASYSCHOLAR_API_KEY_SYNC__';
 
   // ========== Status Management ==========
   const statusClasses = ['status--success', 'status--error', 'status--info', 'status--muted'];
@@ -51,18 +55,6 @@ import './popup.css';
     } else {
       icon.className = 'fa-solid fa-toggle-off';
       label.textContent = 'Enable DOI PDF Download';
-    }
-  };
-
-  const setOpenAIChatToggle = (button, enabled) => {
-    const icon = button.querySelector('i');
-    const label = button.querySelector('.button-label');
-    if (enabled) {
-      icon.className = 'fa-solid fa-toggle-on';
-      label.textContent = 'Disable OpenAI Chat';
-    } else {
-      icon.className = 'fa-solid fa-toggle-off';
-      label.textContent = 'Enable OpenAI Chat';
     }
   };
 
@@ -133,12 +125,20 @@ import './popup.css';
   document.addEventListener('DOMContentLoaded', () => {
     const openaiSettingsToggle = document.getElementById('openaiSettingsToggle');
     const openaiSettingsBody = document.getElementById('openaiSettingsBody');
+    const easyScholarSettingsToggle = document.getElementById('easyScholarSettingsToggle');
+    const easyScholarSettingsBody = document.getElementById('easyScholarSettingsBody');
 
     const apiKeyInput = document.getElementById('openaiApiKeyInput');
     const apiKeyToggleBtn = document.getElementById('openaiApiKeyToggle');
     const apiKeySaveBtn = document.getElementById('openaiApiKeySaveBtn');
     const apiKeyClearBtn = document.getElementById('openaiApiKeyClearBtn');
     const apiKeyHint = document.getElementById('openaiApiKeyHint');
+    const easyScholarApiKeyInput = document.getElementById('easyScholarApiKeyInput');
+    const easyScholarApiKeyToggleBtn = document.getElementById('easyScholarApiKeyToggle');
+    const easyScholarApiKeySaveBtn = document.getElementById('easyScholarApiKeySaveBtn');
+    const easyScholarApiKeyTestBtn = document.getElementById('easyScholarApiKeyTestBtn');
+    const easyScholarApiKeyClearBtn = document.getElementById('easyScholarApiKeyClearBtn');
+    const easyScholarApiKeyHint = document.getElementById('easyScholarApiKeyHint');
     const chatModelSelect = document.getElementById('openaiChatModelSelect');
     const chatModelHint = document.getElementById('openaiChatModelHint');
     const chatModelCustomRow = document.getElementById('openaiChatModelCustomRow');
@@ -148,7 +148,6 @@ import './popup.css';
     const openEasyScholarBtn = document.getElementById('openEasyScholarBtn');
     const openWosDoiQueryBtn = document.getElementById('openWosDoiQueryBtn');
     const openDoiPdfDownloadBtn = document.getElementById('openDoiPdfDownloadBtn');
-    const openOpenAIChatBtn = document.getElementById('openOpenAIChatBtn');
     const sidDisplay = document.getElementById('sidDisplay');
 
     // 新增：DOI列表显示区域和清空按钮
@@ -167,20 +166,23 @@ import './popup.css';
     function updateDoiButton(list) {
       if (!clearDoiBtn || !doiListDisplay) return;
       if (!list || list.length === 0) {
-        doiListDisplay.textContent = 'No DOI received';
+        doiListDisplay.textContent = '';
         clearDoiBtn.disabled = true;
         clearDoiBtn.classList.add('button--disabled');
+        clearDoiBtn.style.display = 'none';
       } else {
         doiListDisplay.innerHTML = `<b>Received DOI list: ${list.length} DOIs</b>`;
         clearDoiBtn.disabled = false;
         clearDoiBtn.classList.remove('button--disabled');
+        clearDoiBtn.style.display = 'flex';
       }
     }
 
     // 初始状态
-    doiListDisplay.textContent = 'DOI列表更新中...';
+    doiListDisplay.textContent = '';
     clearDoiBtn.disabled = true;
     clearDoiBtn.classList.add('button--disabled');
+    clearDoiBtn.style.display = 'none';
 
     // 读取chrome.storage.local中的DOI列表
     chrome.storage.local.get(['enlightenkeyDoiList'], result => {
@@ -198,13 +200,13 @@ import './popup.css';
     let isEasyScholarEnabled = false;
     let isWosDoiQueryEnabled = false;
     let isDoiPdfDownloadEnabled = false;
-    let isOpenAIChatEnabled = false;
+    let currentEasyScholarApiKey = '';
+    let currentEasyScholarVerified = false;
 
     // 初始化按钮状态为 Enable（未开启）
     setEasyScholarToggle(openEasyScholarBtn, false);
     setWosDoiQueryToggle(openWosDoiQueryBtn, false);
     setDoiPdfDownloadToggle(openDoiPdfDownloadBtn, false);
-    setOpenAIChatToggle(openOpenAIChatBtn, false);
 
     const updateApiKeyHint = (message, variant) => {
       if (!apiKeyHint) return;
@@ -213,6 +215,71 @@ import './popup.css';
       if (variant) {
         apiKeyHint.classList.add(variant);
       }
+    };
+
+    const updateEasyScholarApiKeyHint = (message, variant) => {
+      if (!easyScholarApiKeyHint) return;
+      easyScholarApiKeyHint.textContent = message;
+      easyScholarApiKeyHint.classList.remove(...statusClasses);
+      if (variant) {
+        easyScholarApiKeyHint.classList.add(variant);
+      }
+    };
+
+    const syncEasyScholarStateToTab = (tabId, apiKey, verified, onComplete) => {
+      if (!chrome.scripting || !chrome.scripting.executeScript) {
+        onComplete(new Error('chrome.scripting is unavailable'));
+        return;
+      }
+      chrome.scripting.executeScript(
+        {
+          target: { tabId },
+          world: 'MAIN',
+          func: (storageKey, storageValue, verifiedKey, verifiedValue, eventName) => {
+            try {
+              localStorage.setItem(storageKey, storageValue);
+              localStorage.setItem(verifiedKey, String(Boolean(verifiedValue)));
+            } catch (error) {
+              // Ignore storage failures in restricted contexts.
+            }
+            try {
+              window.easyscholar_api_key = storageValue;
+            } catch (error) {
+              // Ignore assignment failures.
+            }
+            document.dispatchEvent(new CustomEvent(eventName, {
+              detail: { apiKey: storageValue, verified: Boolean(verifiedValue) }
+            }));
+          },
+          args: [
+            EASYSCHOLAR_API_KEY_STORAGE_KEY,
+            apiKey,
+            EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY,
+            verified,
+            EASYSCHOLAR_API_KEY_SYNC_EVENT
+          ],
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            onComplete(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          onComplete(null);
+        }
+      );
+    };
+
+    const syncEasyScholarStateToActiveTab = (apiKey, verified) => {
+      withActiveTab((tab) => {
+        if (!tab) {
+          return;
+        }
+        syncEasyScholarStateToTab(tab.id, apiKey, verified, (error) => {
+          if (error) {
+            console.warn('Failed to sync EasyScholar state to page:', error.message);
+          }
+        });
+      });
     };
 
     const saveApiKey = (apiKey) => {
@@ -225,6 +292,98 @@ import './popup.css';
         updateApiKeyHint('API key saved for all pages.', 'status--success');
         setStatus(sidDisplay, 'API key saved', 'status--success');
       });
+    };
+
+    const setEasyScholarStoredState = (apiKey, verified, hintMessage, hintVariant, statusMessage, statusVariant) => {
+      chrome.storage.local.set({
+        [EASYSCHOLAR_API_KEY_STORAGE_KEY]: apiKey,
+        [EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY]: Boolean(verified)
+      }, () => {
+        if (chrome.runtime.lastError) {
+          updateEasyScholarApiKeyHint('Failed to save EasyScholar state.', 'status--error');
+          setStatus(sidDisplay, 'Failed to save EasyScholar state', 'status--error');
+          return;
+        }
+        currentEasyScholarApiKey = apiKey;
+        currentEasyScholarVerified = Boolean(verified);
+        updateEasyScholarApiKeyHint(hintMessage, hintVariant);
+        setStatus(sidDisplay, statusMessage, statusVariant);
+        syncEasyScholarStateToActiveTab(apiKey, verified);
+      });
+    };
+
+    const saveEasyScholarApiKey = (apiKey) => {
+      const key = (apiKey || '').trim();
+      if (key === currentEasyScholarApiKey && currentEasyScholarVerified) {
+        updateEasyScholarApiKeyHint('Verified. Journal Query is available.', 'status--success');
+        setStatus(sidDisplay, 'EasyScholar key already verified', 'status--success');
+        syncEasyScholarStateToActiveTab(key, true);
+        return;
+      }
+      setEasyScholarStoredState(
+        key,
+        false,
+        key ? 'Key saved. Test must pass before Journal Query is visible.' : 'EasyScholar key cleared.',
+        key ? 'status--info' : 'status--muted',
+        key ? 'EasyScholar key saved, verification required' : 'EasyScholar key cleared',
+        key ? 'status--info' : 'status--muted'
+      );
+    };
+
+    const testEasyScholarApiKey = async (apiKey) => {
+      const key = (apiKey || '').trim();
+      if (!key) {
+        updateEasyScholarApiKeyHint('Enter an EasyScholar API key first.', 'status--error');
+        setStatus(sidDisplay, 'EasyScholar key missing', 'status--error');
+        return false;
+      }
+
+      updateEasyScholarApiKeyHint('Testing EasyScholar API key...', 'status--info');
+      setStatus(sidDisplay, 'Testing EasyScholar key...', 'status--info');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      try {
+        const url = `https://www.easyscholar.cc/open/getPublicationRank?secretKey=${encodeURIComponent(key)}&publicationName=${encodeURIComponent('Nature')}`;
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        if (data?.code === 200) {
+          setEasyScholarStoredState(
+            key,
+            true,
+            'Verification passed. Journal Query is now available.',
+            'status--success',
+            'EasyScholar key verified',
+            'status--success'
+          );
+          return true;
+        }
+
+        setEasyScholarStoredState(
+          key,
+          false,
+          data?.message || 'Verification failed.',
+          'status--error',
+          'EasyScholar verification failed',
+          'status--error'
+        );
+        return false;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        setEasyScholarStoredState(
+          key,
+          false,
+          error?.name === 'AbortError' ? 'EasyScholar test timed out.' : 'Verification failed. Check the key and try again.',
+          'status--error',
+          'EasyScholar verification failed',
+          'status--error'
+        );
+        return false;
+      }
     };
 
     if (apiKeyInput) {
@@ -242,6 +401,32 @@ import './popup.css';
 
       apiKeyInput.addEventListener('blur', () => {
         saveApiKey(apiKeyInput.value.trim());
+      });
+    }
+
+    if (easyScholarApiKeyInput) {
+      chrome.storage.local.get([EASYSCHOLAR_API_KEY_STORAGE_KEY], result => {
+        currentEasyScholarApiKey = result[EASYSCHOLAR_API_KEY_STORAGE_KEY] || '';
+        easyScholarApiKeyInput.value = currentEasyScholarApiKey;
+      });
+      chrome.storage.local.get([EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY], result => {
+        const verified = Boolean(result[EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY]);
+        currentEasyScholarVerified = verified;
+        updateEasyScholarApiKeyHint(
+          verified ? 'Verified. Journal Query is available.' : 'Only verified keys can enable Journal Query.',
+          verified ? 'status--success' : 'status--muted'
+        );
+      });
+
+      easyScholarApiKeyInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          saveEasyScholarApiKey(easyScholarApiKeyInput.value.trim());
+        }
+      });
+
+      easyScholarApiKeyInput.addEventListener('blur', () => {
+        saveEasyScholarApiKey(easyScholarApiKeyInput.value.trim());
       });
     }
 
@@ -412,35 +597,75 @@ import './popup.css';
       });
     }
 
+    if (easyScholarApiKeySaveBtn) {
+      easyScholarApiKeySaveBtn.addEventListener('click', () => {
+        saveEasyScholarApiKey((easyScholarApiKeyInput?.value || '').trim());
+      });
+    }
+
+    if (easyScholarApiKeyTestBtn) {
+      easyScholarApiKeyTestBtn.addEventListener('click', async () => {
+        await testEasyScholarApiKey((easyScholarApiKeyInput?.value || '').trim());
+      });
+    }
+
+    if (easyScholarApiKeyClearBtn) {
+      easyScholarApiKeyClearBtn.addEventListener('click', () => {
+        if (easyScholarApiKeyInput) {
+          easyScholarApiKeyInput.value = '';
+        }
+        saveEasyScholarApiKey('');
+      });
+    }
+
+    if (easyScholarApiKeyToggleBtn && easyScholarApiKeyInput) {
+      easyScholarApiKeyToggleBtn.addEventListener('click', () => {
+        const isHidden = easyScholarApiKeyInput.type === 'password';
+        easyScholarApiKeyInput.type = isHidden ? 'text' : 'password';
+        const icon = easyScholarApiKeyToggleBtn.querySelector('i');
+        if (icon) {
+          icon.className = isHidden ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+        }
+      });
+    }
+
 
     openEasyScholarBtn.addEventListener('click', () => {
-      isEasyScholarEnabled = !isEasyScholarEnabled;
-      setEasyScholarToggle(openEasyScholarBtn, isEasyScholarEnabled);
-
-      withActiveTab((tab) => {
-        if (!tab) {
-          setStatus(sidDisplay, 'No active tab detected', 'status--error');
+      chrome.storage.local.get([EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY], result => {
+        if (!result[EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY]) {
+          updateEasyScholarApiKeyHint('Verify the EasyScholar API key before opening Journal Query.', 'status--error');
+          setStatus(sidDisplay, 'EasyScholar key not verified', 'status--error');
           return;
         }
-        chrome.tabs.sendMessage(
-          tab.id,
-          { type: isEasyScholarEnabled ? 'OPEN_EASYSCHOLAR' : 'CLOSE_EASYSCHOLAR' },
-          response => {
-            if (chrome.runtime.lastError) {
-              setStatus(sidDisplay, 'Error: ' + chrome.runtime.lastError.message, 'status--error');
-              return;
-            }
-            if (response && response.success) {
-              setStatus(
-                sidDisplay,
-                isEasyScholarEnabled ? 'EasyScholar enabled' : 'EasyScholar disabled',
-                'status--success'
-              );
-            } else {
-              setStatus(sidDisplay, 'Failed to toggle EasyScholar', 'status--error');
-            }
+
+        isEasyScholarEnabled = !isEasyScholarEnabled;
+        setEasyScholarToggle(openEasyScholarBtn, isEasyScholarEnabled);
+
+        withActiveTab((tab) => {
+          if (!tab) {
+            setStatus(sidDisplay, 'No active tab detected', 'status--error');
+            return;
           }
-        );
+          chrome.tabs.sendMessage(
+            tab.id,
+            { type: isEasyScholarEnabled ? 'OPEN_EASYSCHOLAR' : 'CLOSE_EASYSCHOLAR', preferredTab: 'journal' },
+            response => {
+              if (chrome.runtime.lastError) {
+                setStatus(sidDisplay, 'Error: ' + chrome.runtime.lastError.message, 'status--error');
+                return;
+              }
+              if (response && response.success) {
+                setStatus(
+                  sidDisplay,
+                  isEasyScholarEnabled ? 'EasyScholar enabled' : 'EasyScholar disabled',
+                  'status--success'
+                );
+              } else {
+                setStatus(sidDisplay, 'Failed to toggle EasyScholar', 'status--error');
+              }
+            }
+          );
+        });
       });
     });
 
@@ -506,51 +731,34 @@ import './popup.css';
       });
     });
 
-    openOpenAIChatBtn.addEventListener('click', () => {
-      isOpenAIChatEnabled = !isOpenAIChatEnabled;
-      setOpenAIChatToggle(openOpenAIChatBtn, isOpenAIChatEnabled);
-
-      withActiveTab((tab) => {
-        if (!tab) {
-          setStatus(sidDisplay, 'No active tab detected', 'status--error');
-          return;
-        }
-        chrome.tabs.sendMessage(
-          tab.id,
-          { type: isOpenAIChatEnabled ? 'OPEN_OPENAI_CHAT' : 'CLOSE_OPENAI_CHAT' },
-          response => {
-            if (chrome.runtime.lastError) {
-              setStatus(sidDisplay, 'Error: ' + chrome.runtime.lastError.message, 'status--error');
-              return;
-            }
-            if (response && response.success) {
-              setStatus(
-                sidDisplay,
-                isOpenAIChatEnabled ? 'OpenAI chat enabled' : 'OpenAI chat disabled',
-                'status--success'
-              );
-            } else {
-              setStatus(sidDisplay, 'Failed to toggle OpenAI chat', 'status--error');
-            }
-          }
-        );
-      });
-    });
-
-    const setOpenaiPanelCollapsed = (collapsed) => {
-      if (!openaiSettingsBody || !openaiSettingsToggle) return;
-      openaiSettingsBody.classList.toggle('is-collapsed', collapsed);
-      openaiSettingsToggle.classList.toggle('is-collapsed', collapsed);
-      openaiSettingsToggle.setAttribute('aria-expanded', String(!collapsed));
-      localStorage.setItem(OPENAI_SETTINGS_COLLAPSED_KEY, String(collapsed));
+    const setPanelCollapsed = (bodyElement, toggleElement, storageKey, collapsed) => {
+      if (!bodyElement || !toggleElement) return;
+      bodyElement.classList.toggle('is-collapsed', collapsed);
+      toggleElement.classList.toggle('is-collapsed', collapsed);
+      toggleElement.setAttribute('aria-expanded', String(!collapsed));
+      localStorage.setItem(storageKey, String(collapsed));
     };
 
     if (openaiSettingsToggle) {
       const isCollapsed = localStorage.getItem(OPENAI_SETTINGS_COLLAPSED_KEY) === 'true';
-      setOpenaiPanelCollapsed(isCollapsed);
+      setPanelCollapsed(openaiSettingsBody, openaiSettingsToggle, OPENAI_SETTINGS_COLLAPSED_KEY, isCollapsed);
       openaiSettingsToggle.addEventListener('click', () => {
         const nowCollapsed = !openaiSettingsBody || !openaiSettingsBody.classList.contains('is-collapsed');
-        setOpenaiPanelCollapsed(nowCollapsed);
+        setPanelCollapsed(openaiSettingsBody, openaiSettingsToggle, OPENAI_SETTINGS_COLLAPSED_KEY, nowCollapsed);
+      });
+    }
+
+    if (easyScholarSettingsToggle) {
+      const isCollapsed = localStorage.getItem(EASYSCHOLAR_SETTINGS_COLLAPSED_KEY) === 'true';
+      setPanelCollapsed(easyScholarSettingsBody, easyScholarSettingsToggle, EASYSCHOLAR_SETTINGS_COLLAPSED_KEY, isCollapsed);
+      easyScholarSettingsToggle.addEventListener('click', () => {
+        const nowCollapsed = !easyScholarSettingsBody || !easyScholarSettingsBody.classList.contains('is-collapsed');
+        setPanelCollapsed(
+          easyScholarSettingsBody,
+          easyScholarSettingsToggle,
+          EASYSCHOLAR_SETTINGS_COLLAPSED_KEY,
+          nowCollapsed
+        );
       });
     }
 

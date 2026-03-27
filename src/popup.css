@@ -299,11 +299,13 @@ body {
 .panel-actions {
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
 }
 
 .panel-actions .button {
     flex: 1;
     justify-content: center;
+    min-width: 72px;
 }
 
 .helper {

@@ -115,6 +115,32 @@ window.wosids = [];
         }
     };
 
+    const requestStorage = (action, key, value) => new Promise((resolve) => {
+        const requestId = `gewuaide-wos-doi-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const handler = (event) => {
+            if (!event?.data || event.data.type !== "GEWU_QUICKLOAD_STORAGE_RESPONSE") {
+                return;
+            }
+            if (event.data.requestId !== requestId) {
+                return;
+            }
+            window.removeEventListener("message", handler);
+            resolve(event.data.value);
+        };
+        window.addEventListener("message", handler);
+        window.postMessage({
+            type: "GEWU_QUICKLOAD_STORAGE",
+            action,
+            key,
+            value,
+            requestId
+        }, "*");
+        setTimeout(() => {
+            window.removeEventListener("message", handler);
+            resolve(null);
+        }, 1200);
+    });
+
     // 检查并删除已存在的实例
     const existing = document.getElementById("clipboard-reader-box");
     if (existing) {
@@ -125,10 +151,16 @@ window.wosids = [];
     // 从 localStorage 读取保存的位置和显示状态
     const POSITION_TOP_KEY = "clipboard-reader-box-top";
     const POSITION_LEFT_KEY = "clipboard-reader-box-left";
+    const WIDTH_KEY = "clipboard-reader-box-width";
+    const HEIGHT_KEY = "clipboard-reader-box-height";
     const HISTORY_KEY = "clipboard-reader-box-history";
+    const EASYSCHOLAR_VERIFIED_KEY = "wos-easyscholar-api-key-verified";
+    const EASYSCHOLAR_SYNC_EVENT = "__EASYSCHOLAR_API_KEY_SYNC__";
     const MAX_HISTORY = 20;
     const savedTop = readStorage(POSITION_TOP_KEY, "80px");
     const savedLeft = readStorage(POSITION_LEFT_KEY, null);
+    const savedWidth = readStorage(WIDTH_KEY, "260px");
+    const savedHeight = readStorage(HEIGHT_KEY, "520px");
 
     // 历史记录管理
     let queryHistory = [];
@@ -194,59 +226,67 @@ window.wosids = [];
     const box = document.createElement("div");
     box.id = "clipboard-reader-box";
     box.style.position = "fixed";
+    const initialWidth = Math.max(260, parseInt(savedWidth, 10) || 260);
+    const initialHeight = Math.max(320, parseInt(savedHeight, 10) || 520);
     const { top, left } = window.clampPanelPosition({
         top: savedTop,
         left: savedLeft,
         defaultTop: 80,
         defaultLeft: window.innerWidth - 360,
-        width: 250,
-        height: 320,
+        width: initialWidth,
+        height: initialHeight,
         margin: 8
     });
     box.style.top = `${Math.round(top)}px`;
     box.style.left = `${Math.round(left)}px`;
     box.style.right = "auto";
     box.style.zIndex = "999999";
-    box.style.fontFamily = window.ENLIGHTENKEY_FONT_FAMILY || 'Arial, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif';
-    box.style.background = "rgba(0,0,0,0.85)";
-    box.style.padding = "8px";
-    box.style.borderRadius = "8px";
+    box.style.fontFamily = window.ENLIGHTENKEY_FONT_FAMILY || '"Segoe UI", "Helvetica Neue", Arial, "Microsoft YaHei", "PingFang SC", sans-serif';
+    box.style.background = "#ffffff";
+    box.style.padding = "0";
+    box.style.borderRadius = "4px";
     box.style.display = "none"; // 默认隐藏，等待popup开启
     box.style.flexDirection = "column";
-    box.style.gap = "8px";
-    box.style.backdropFilter = "blur(5px)";
-    box.style.boxShadow = "0 4px 12px rgba(0,0,0,0.4)";
-    box.style.width = "250px";
-    box.style.minWidth = "250px";
+    box.style.border = "1px solid #d7dfe8";
+    box.style.boxShadow = "0 1px 4px rgba(15, 23, 42, 0.08)";
+    box.style.width = `${initialWidth}px`;
+    box.style.height = `${initialHeight}px`;
+    box.style.minWidth = "260px";
+    box.style.minHeight = "320px";
+    box.style.overflow = "hidden";
 
     // 控制栏（标题和拖动按钮）
     const controlRow = document.createElement("div");
     controlRow.style.display = "flex";
     controlRow.style.alignItems = "center";
     controlRow.style.justifyContent = "space-between";
-    controlRow.style.gap = "6px";
+    controlRow.style.gap = "4px";
     controlRow.style.cursor = "move";
     controlRow.style.userSelect = "none";
+    controlRow.style.padding = "6px 10px";
+    controlRow.style.background = "#174b78";
+    controlRow.style.borderBottom = "1px solid #123a5c";
+    controlRow.style.borderRadius = "4px 4px 0 0";
 
     const title = document.createElement("span");
     title.textContent = "Batch Query";
     title.style.color = "#fff";
-    title.style.fontSize = "14px";
+    title.style.fontSize = "12px";
     title.style.fontWeight = "bold";
     title.style.cursor = "move";
 
 
     // 关闭按钮
-    const closeBtn = document.createElement("span");
+    const closeBtn = document.createElement("button");
     closeBtn.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
+    closeBtn.style.background = "transparent";
+    closeBtn.style.border = "1px solid rgba(255,255,255,0.20)";
     closeBtn.style.color = "#fff";
-    closeBtn.style.fontSize = "16px";
+    closeBtn.style.fontSize = "11px";
     closeBtn.style.cursor = "pointer";
-    closeBtn.style.opacity = "0.7";
-    closeBtn.style.transition = "opacity 0.2s";
+    closeBtn.style.padding = "2px 6px";
+    closeBtn.style.borderRadius = "4px";
     closeBtn.title = "Close panel";
-    closeBtn.onmouseover = () => closeBtn.style.opacity = "1";
-    closeBtn.onmouseout = () => closeBtn.style.opacity = "0.7";
     // onclick 将在后面定义
 
     controlRow.appendChild(title);
@@ -257,94 +297,247 @@ window.wosids = [];
     const tabRow = document.createElement('div');
     tabRow.style.display = 'flex';
     tabRow.style.gap = '4px';
-    tabRow.style.padding = '3px';
-    tabRow.style.borderRadius = '8px';
-    tabRow.style.background = 'rgba(255,255,255,0.14)';
-    tabRow.style.border = '1px solid rgba(255,255,255,0.2)';
+    tabRow.style.padding = '6px 8px 0';
 
     const queryTabBtn = document.createElement('button');
     queryTabBtn.textContent = 'DOI Query';
     queryTabBtn.style.flex = '1';
-    queryTabBtn.style.padding = '7px 8px';
-    queryTabBtn.style.border = 'none';
-    queryTabBtn.style.borderRadius = '6px';
-    queryTabBtn.style.fontSize = '12px';
+    queryTabBtn.style.padding = '3px 8px';
+    queryTabBtn.style.border = '1px solid #c8d5e2';
+    queryTabBtn.style.borderRadius = '2px';
+    queryTabBtn.style.fontSize = '11px';
     queryTabBtn.style.cursor = 'pointer';
-    queryTabBtn.style.transition = 'all 0.2s ease';
     queryTabBtn.style.outline = 'none';
-    queryTabBtn.style.fontWeight = 'bold';
+    queryTabBtn.style.fontWeight = '600';
 
     const exportTabBtn = document.createElement('button');
     exportTabBtn.textContent = 'DOI TXT Export';
     exportTabBtn.style.flex = '1';
-    exportTabBtn.style.padding = '7px 8px';
-    exportTabBtn.style.border = 'none';
-    exportTabBtn.style.borderRadius = '6px';
-    exportTabBtn.style.fontSize = '12px';
+    exportTabBtn.style.padding = '3px 8px';
+    exportTabBtn.style.border = '1px solid #c8d5e2';
+    exportTabBtn.style.borderRadius = '2px';
+    exportTabBtn.style.fontSize = '11px';
     exportTabBtn.style.cursor = 'pointer';
-    exportTabBtn.style.transition = 'all 0.2s ease';
     exportTabBtn.style.outline = 'none';
-    exportTabBtn.style.fontWeight = 'bold';
+    exportTabBtn.style.fontWeight = '600';
+
+    const journalTabBtn = document.createElement('button');
+    journalTabBtn.textContent = 'Journal Query';
+    journalTabBtn.style.flex = '1';
+    journalTabBtn.style.padding = '3px 8px';
+    journalTabBtn.style.border = '1px solid #c8d5e2';
+    journalTabBtn.style.borderRadius = '2px';
+    journalTabBtn.style.fontSize = '11px';
+    journalTabBtn.style.cursor = 'pointer';
+    journalTabBtn.style.outline = 'none';
+    journalTabBtn.style.fontWeight = '600';
+
+    const builderTabBtn = document.createElement('button');
+    builderTabBtn.textContent = 'WOS Query';
+    builderTabBtn.style.flex = '1';
+    builderTabBtn.style.padding = '3px 8px';
+    builderTabBtn.style.border = '1px solid #c8d5e2';
+    builderTabBtn.style.borderRadius = '2px';
+    builderTabBtn.style.fontSize = '11px';
+    builderTabBtn.style.cursor = 'pointer';
+    builderTabBtn.style.outline = 'none';
+    builderTabBtn.style.fontWeight = '600';
 
     tabRow.appendChild(queryTabBtn);
     tabRow.appendChild(exportTabBtn);
+    tabRow.appendChild(journalTabBtn);
+    tabRow.appendChild(builderTabBtn);
     box.appendChild(tabRow);
 
     const tabContentWrap = document.createElement('div');
     tabContentWrap.style.display = 'flex';
     tabContentWrap.style.flexDirection = 'column';
+    tabContentWrap.style.flex = '1';
+    tabContentWrap.style.minHeight = '0';
     tabContentWrap.style.gap = '0';
-    tabContentWrap.style.marginTop = '2px';
+    tabContentWrap.style.padding = '8px';
+    tabContentWrap.style.paddingTop = '4px';
+    tabContentWrap.style.overflow = 'auto';
 
     const queryTabPanel = document.createElement('div');
     queryTabPanel.style.display = 'flex';
     queryTabPanel.style.flexDirection = 'column';
-    queryTabPanel.style.gap = '8px';
-    queryTabPanel.style.background = 'rgba(255,255,255,0.08)';
-    queryTabPanel.style.border = '1px solid rgba(255,255,255,0.16)';
-    queryTabPanel.style.borderRadius = '8px';
-    queryTabPanel.style.padding = '8px';
+    queryTabPanel.style.minHeight = '100%';
+    queryTabPanel.style.gap = '6px';
+    queryTabPanel.style.background = '#ffffff';
+    queryTabPanel.style.border = 'none';
+    queryTabPanel.style.borderRadius = '0';
+    queryTabPanel.style.padding = '0';
     queryTabPanel.style.boxSizing = 'border-box';
 
     const exportTabPanel = document.createElement('div');
     exportTabPanel.style.display = 'none';
     exportTabPanel.style.flexDirection = 'column';
-    exportTabPanel.style.gap = '8px';
-    exportTabPanel.style.background = 'rgba(255,255,255,0.08)';
-    exportTabPanel.style.border = '1px solid rgba(255,255,255,0.16)';
-    exportTabPanel.style.borderRadius = '8px';
-    exportTabPanel.style.padding = '8px';
+    exportTabPanel.style.minHeight = '100%';
+    exportTabPanel.style.gap = '6px';
+    exportTabPanel.style.background = '#ffffff';
+    exportTabPanel.style.border = 'none';
+    exportTabPanel.style.borderRadius = '0';
+    exportTabPanel.style.padding = '0';
     exportTabPanel.style.boxSizing = 'border-box';
+
+    const journalTabPanel = document.createElement('div');
+    journalTabPanel.style.display = 'none';
+    journalTabPanel.style.flexDirection = 'column';
+    journalTabPanel.style.minHeight = '100%';
+    journalTabPanel.style.gap = '6px';
+    journalTabPanel.style.background = '#ffffff';
+    journalTabPanel.style.border = 'none';
+    journalTabPanel.style.borderRadius = '0';
+    journalTabPanel.style.padding = '0';
+    journalTabPanel.style.boxSizing = 'border-box';
+
+    const builderTabPanel = document.createElement('div');
+    builderTabPanel.style.display = 'none';
+    builderTabPanel.style.flexDirection = 'column';
+    builderTabPanel.style.minHeight = '100%';
+    builderTabPanel.style.gap = '6px';
+    builderTabPanel.style.background = '#ffffff';
+    builderTabPanel.style.border = 'none';
+    builderTabPanel.style.borderRadius = '0';
+    builderTabPanel.style.padding = '0';
+    builderTabPanel.style.boxSizing = 'border-box';
 
     tabContentWrap.appendChild(queryTabPanel);
     tabContentWrap.appendChild(exportTabPanel);
+    tabContentWrap.appendChild(journalTabPanel);
+    tabContentWrap.appendChild(builderTabPanel);
     box.appendChild(tabContentWrap);
 
     const setActiveTab = (tabName) => {
         const isQuery = tabName === 'query';
+        const isExport = tabName === 'export';
+        const isJournal = tabName === 'journal';
+        const isBuilder = tabName === 'builder';
+
         queryTabPanel.style.display = isQuery ? 'flex' : 'none';
-        exportTabPanel.style.display = isQuery ? 'none' : 'flex';
+        exportTabPanel.style.display = isExport ? 'flex' : 'none';
+        journalTabPanel.style.display = isJournal ? 'flex' : 'none';
+        builderTabPanel.style.display = isBuilder ? 'flex' : 'none';
 
-        queryTabBtn.style.background = isQuery ? 'rgba(255,255,255,0.92)' : 'transparent';
-        queryTabBtn.style.color = isQuery ? '#1f2937' : 'rgba(255,255,255,0.88)';
-        queryTabBtn.style.fontWeight = isQuery ? 'bold' : 'normal';
-        queryTabBtn.style.boxShadow = isQuery ? '0 1px 3px rgba(0,0,0,0.2)' : 'none';
+        queryTabBtn.style.background = isQuery ? '#174b78' : '#ffffff';
+        queryTabBtn.style.color = isQuery ? '#ffffff' : '#1f5a92';
+        queryTabBtn.style.borderColor = isQuery ? '#123a5c' : '#c8d5e2';
 
-        exportTabBtn.style.background = isQuery ? 'transparent' : 'rgba(255,255,255,0.92)';
-        exportTabBtn.style.color = isQuery ? 'rgba(255,255,255,0.88)' : '#1f2937';
-        exportTabBtn.style.fontWeight = isQuery ? 'normal' : 'bold';
-        exportTabBtn.style.boxShadow = isQuery ? 'none' : '0 1px 3px rgba(0,0,0,0.2)';
+        exportTabBtn.style.background = isExport ? '#174b78' : '#ffffff';
+        exportTabBtn.style.color = isExport ? '#ffffff' : '#1f5a92';
+        exportTabBtn.style.borderColor = isExport ? '#123a5c' : '#c8d5e2';
+
+        journalTabBtn.style.background = isJournal ? '#174b78' : '#ffffff';
+        journalTabBtn.style.color = isJournal ? '#ffffff' : '#1f5a92';
+        journalTabBtn.style.borderColor = isJournal ? '#123a5c' : '#c8d5e2';
+
+        builderTabBtn.style.background = isBuilder ? '#174b78' : '#ffffff';
+        builderTabBtn.style.color = isBuilder ? '#ffffff' : '#1f5a92';
+        builderTabBtn.style.borderColor = isBuilder ? '#123a5c' : '#c8d5e2';
     };
 
     queryTabBtn.onclick = () => setActiveTab('query');
     exportTabBtn.onclick = () => setActiveTab('export');
+    journalTabBtn.onclick = () => setActiveTab('journal');
+    builderTabBtn.onclick = () => setActiveTab('builder');
     setActiveTab('query');
+
+    const journalAccessHint = document.createElement('div');
+    journalAccessHint.textContent = 'Journal Query is locked until the EasyScholar API key passes verification in popup settings.';
+    journalAccessHint.style.display = 'none';
+    journalAccessHint.style.padding = '6px 8px';
+    journalAccessHint.style.border = '1px solid #e2d1c7';
+    journalAccessHint.style.borderRadius = '2px';
+    journalAccessHint.style.background = '#fbf5f1';
+    journalAccessHint.style.color = '#8a4b3c';
+    journalAccessHint.style.fontSize = '11px';
+    journalAccessHint.style.lineHeight = '1.4';
+    tabContentWrap.insertBefore(journalAccessHint, queryTabPanel);
+
+    const applyJournalAccess = (verified) => {
+        const isVerified = Boolean(verified);
+        journalTabBtn.style.display = isVerified ? 'block' : 'none';
+        journalAccessHint.style.display = isVerified ? 'none' : 'block';
+        if (!isVerified && journalTabPanel.style.display !== 'none') {
+            setActiveTab('query');
+        }
+    };
+
+    const mountEasyScholarPanel = () => {
+        if (journalTabPanel.dataset.easyscholarMounted === 'true') {
+            return true;
+        }
+        const easyScholarPanel = document.getElementById('wos_easyscholar_panel');
+        if (!easyScholarPanel || easyScholarPanel.dataset.embeddedInBatchQuery === 'true') {
+            return false;
+        }
+
+        const content = easyScholarPanel.children[1];
+        if (!content) {
+            return false;
+        }
+
+        easyScholarPanel.dataset.embeddedInBatchQuery = 'true';
+        easyScholarPanel.style.display = 'none';
+        easyScholarPanel.style.pointerEvents = 'none';
+        content.style.padding = '0';
+        content.style.gap = '6px';
+        content.style.minHeight = '100%';
+        content.style.boxSizing = 'border-box';
+        journalTabPanel.appendChild(content);
+        journalTabPanel.dataset.easyscholarMounted = 'true';
+        return true;
+    };
+
+    const ensureEasyScholarMounted = (attemptsLeft = 10) => {
+        if (mountEasyScholarPanel() || attemptsLeft <= 0) {
+            return;
+        }
+        setTimeout(() => ensureEasyScholarMounted(attemptsLeft - 1), 120);
+    };
+
+    document.addEventListener('__WOS_DOI_QUERY_SWITCH_TAB__', (event) => {
+        const tabName = event?.detail?.tab;
+        if (!tabName) {
+            return;
+        }
+        if (tabName === 'journal') {
+            if (journalTabBtn.style.display === 'none') {
+                setActiveTab('query');
+                return;
+            }
+            ensureEasyScholarMounted();
+        }
+        setActiveTab(tabName);
+    });
+
+    requestStorage("get", EASYSCHOLAR_VERIFIED_KEY).then((value) => {
+        applyJournalAccess(value === true || value === "true");
+    });
+
+    document.addEventListener(EASYSCHOLAR_SYNC_EVENT, (event) => {
+        applyJournalAccess(Boolean(event?.detail?.verified));
+    });
+
+    ensureEasyScholarMounted();
+
+    const resizeHandle = document.createElement("div");
+    resizeHandle.style.position = "absolute";
+    resizeHandle.style.right = "0";
+    resizeHandle.style.bottom = "0";
+    resizeHandle.style.width = "14px";
+    resizeHandle.style.height = "14px";
+    resizeHandle.style.cursor = "nwse-resize";
+    resizeHandle.style.background = "linear-gradient(135deg, transparent 0 42%, rgba(23,75,120,0.45) 42% 54%, transparent 54% 66%, rgba(23,75,120,0.45) 66% 78%, transparent 78%)";
+    resizeHandle.style.userSelect = "none";
 
     // 内容容器
     const contentBox = document.createElement("div");
     contentBox.style.display = "flex";
     contentBox.style.flexDirection = "column";
-    contentBox.style.gap = "8px";
+    contentBox.style.gap = "6px";
+    contentBox.style.padding = "0";
 
 
     const textarea = document.createElement("textarea");
@@ -352,15 +545,15 @@ window.wosids = [];
     textarea.style.width = "100%";
     textarea.style.minHeight = "200px";
     textarea.style.maxHeight = "600px";
-    textarea.style.border = "none";
-    textarea.style.padding = "8px";
-    textarea.style.borderRadius = "5px";
+    textarea.style.border = "1px solid #e4ebf1";
+    textarea.style.padding = "6px 8px";
+    textarea.style.borderRadius = "2px";
     textarea.style.outline = "none";
-    textarea.style.fontSize = "12px";
+    textarea.style.fontSize = "11px";
     textarea.style.resize = "vertical";
     textarea.style.fontFamily = "Consolas, 'Courier New', monospace";
     textarea.style.boxSizing = "border-box";
-    textarea.style.background = "rgba(255,255,255,0.9)";
+    textarea.style.background = "#ffffff";
 
     // 自动提取开关状态
     const AUTO_EXTRACT_KEY = "clipboard-reader-auto-extract";
@@ -456,20 +649,21 @@ window.wosids = [];
     // 按钮行
     const buttonRow = document.createElement("div");
     buttonRow.style.display = "flex";
-    buttonRow.style.gap = "6px";
+    buttonRow.style.gap = "4px";
 
     // Query 按钮
     const queryBtn = document.createElement("button");
-    queryBtn.textContent = "Query";
+    queryBtn.textContent = "Search";
     queryBtn.style.flex = "1";
-    queryBtn.style.padding = "6px 12px";
-    queryBtn.style.background = "rgba(76,175,80,0.8)";
+    queryBtn.style.padding = "3px 8px";
+    queryBtn.style.height = "24px";
+    queryBtn.style.background = "#174b78";
     queryBtn.style.color = "#fff";
-    queryBtn.style.border = "none";
-    queryBtn.style.borderRadius = "5px";
+    queryBtn.style.border = "1px solid #123a5c";
+    queryBtn.style.borderRadius = "2px";
     queryBtn.style.cursor = "pointer";
-    queryBtn.style.fontSize = "12px";
-    queryBtn.style.fontWeight = "bold";
+    queryBtn.style.fontSize = "11px";
+    queryBtn.style.fontWeight = "600";
     queryBtn.style.outline = "none";
     queryBtn.title = "Query WOS IDs or DOIs from textarea";
 
@@ -491,14 +685,15 @@ window.wosids = [];
     const autoExtractBtn = document.createElement("button");
     autoExtractBtn.textContent = autoExtractEnabled ? "Auto: ON" : "Auto: OFF";
     autoExtractBtn.style.flex = "1";
-    autoExtractBtn.style.padding = "6px 12px";
-    autoExtractBtn.style.background = autoExtractEnabled ? "rgba(76,175,80,0.8)" : "rgba(158,158,158,0.8)";
-    autoExtractBtn.style.color = "#fff";
-    autoExtractBtn.style.border = "none";
-    autoExtractBtn.style.borderRadius = "5px";
+    autoExtractBtn.style.padding = "3px 8px";
+    autoExtractBtn.style.height = "24px";
+    autoExtractBtn.style.background = autoExtractEnabled ? "#edf4fa" : "#f7f9fb";
+    autoExtractBtn.style.color = autoExtractEnabled ? "#174b78" : "#486581";
+    autoExtractBtn.style.border = autoExtractEnabled ? "1px solid #9eb6cb" : "1px solid #d0d9e3";
+    autoExtractBtn.style.borderRadius = "2px";
     autoExtractBtn.style.cursor = "pointer";
-    autoExtractBtn.style.fontSize = "12px";
-    autoExtractBtn.style.fontWeight = "bold";
+    autoExtractBtn.style.fontSize = "11px";
+    autoExtractBtn.style.fontWeight = "600";
     autoExtractBtn.style.outline = "none";
     autoExtractBtn.style.whiteSpace = "nowrap";
     autoExtractBtn.title = "Toggle auto-extract WOS IDs and DOIs on paste";
@@ -508,7 +703,9 @@ window.wosids = [];
         writeStorage(AUTO_EXTRACT_KEY, autoExtractEnabled.toString());
 
         autoExtractBtn.textContent = autoExtractEnabled ? "Auto: ON" : "Auto: OFF";
-        autoExtractBtn.style.background = autoExtractEnabled ? "rgba(76,175,80,0.8)" : "rgba(158,158,158,0.8)";
+        autoExtractBtn.style.background = autoExtractEnabled ? "#edf4fa" : "#f7f9fb";
+        autoExtractBtn.style.color = autoExtractEnabled ? "#174b78" : "#486581";
+        autoExtractBtn.style.border = autoExtractEnabled ? "1px solid #9eb6cb" : "1px solid #d0d9e3";
 
     };
 
@@ -522,7 +719,7 @@ window.wosids = [];
     const exportFlowGroup = document.createElement('div');
     exportFlowGroup.style.display = 'flex';
     exportFlowGroup.style.flexDirection = 'column';
-    exportFlowGroup.style.gap = '8px';
+    exportFlowGroup.style.gap = '6px';
     exportFlowGroup.style.marginTop = '0';
     exportFlowGroup.style.padding = '0';
     exportFlowGroup.style.background = 'transparent';
@@ -531,16 +728,16 @@ window.wosids = [];
 
     const exportFlowTitle = document.createElement('div');
     exportFlowTitle.textContent = 'Export Flow';
-    exportFlowTitle.style.color = '#fff';
-    exportFlowTitle.style.fontSize = '12px';
-    exportFlowTitle.style.fontWeight = 'bold';
+    exportFlowTitle.style.color = '#274c6b';
+    exportFlowTitle.style.fontSize = '11px';
+    exportFlowTitle.style.fontWeight = '600';
 
     const exportFlowHint = document.createElement('div');
     exportFlowHint.textContent = 'Step 1: Select directory -> Step 2: Export -> Step 3: Check progress';
-    exportFlowHint.style.color = 'rgba(255,255,255,0.78)';
+    exportFlowHint.style.color = '#6b7c93';
     exportFlowHint.style.fontSize = '10px';
     exportFlowHint.style.lineHeight = '1.4';
-    exportFlowHint.style.marginBottom = '2px';
+    exportFlowHint.style.marginBottom = '0';
 
     exportFlowGroup.appendChild(exportFlowTitle);
     exportFlowGroup.appendChild(exportFlowHint);
@@ -549,14 +746,15 @@ window.wosids = [];
     selectExportDirBtn.textContent = 'Step 1: Select Export Directory';
     selectExportDirBtn.style.display = 'block';
     selectExportDirBtn.style.width = '100%';
-    selectExportDirBtn.style.padding = '8px 0';
-    selectExportDirBtn.style.background = '#546e7a';
-    selectExportDirBtn.style.color = '#fff';
-    selectExportDirBtn.style.border = 'none';
-    selectExportDirBtn.style.borderRadius = '4px';
-    selectExportDirBtn.style.fontSize = '12px';
+    selectExportDirBtn.style.padding = '4px 8px';
+    selectExportDirBtn.style.height = '24px';
+    selectExportDirBtn.style.background = '#f7f9fb';
+    selectExportDirBtn.style.color = '#486581';
+    selectExportDirBtn.style.border = '1px solid #d0d9e3';
+    selectExportDirBtn.style.borderRadius = '2px';
+    selectExportDirBtn.style.fontSize = '11px';
     selectExportDirBtn.style.cursor = 'pointer';
-    selectExportDirBtn.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
+    selectExportDirBtn.style.boxShadow = 'none';
 
     const setButtonIconAndText = (button, iconClass, text) => {
         button.replaceChildren();
@@ -572,14 +770,15 @@ window.wosids = [];
     exportBtn.textContent = exportBtnDefaultText;
     exportBtn.style.display = 'block';
     exportBtn.style.width = '100%';
-    exportBtn.style.padding = '10px 0';
-    exportBtn.style.background = '#1976d2';
+    exportBtn.style.padding = '4px 8px';
+    exportBtn.style.height = '24px';
+    exportBtn.style.background = '#174b78';
     exportBtn.style.color = '#fff';
-    exportBtn.style.border = 'none';
-    exportBtn.style.borderRadius = '4px';
-    exportBtn.style.fontSize = '12px';
+    exportBtn.style.border = '1px solid #123a5c';
+    exportBtn.style.borderRadius = '2px';
+    exportBtn.style.fontSize = '11px';
     exportBtn.style.cursor = 'pointer';
-    exportBtn.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
+    exportBtn.style.boxShadow = 'none';
     exportBtn.disabled = true;
 
     let exportInProgress = false;
@@ -588,10 +787,14 @@ window.wosids = [];
         const dirLabel = exportDirName || (hasDir && exportDirHandle && exportDirHandle.name ? exportDirHandle.name : '');
         if (hasDir) {
             setButtonIconAndText(selectExportDirBtn, 'fa-solid fa-circle-check', `Step 1: Directory Selected (${dirLabel})`);
-            selectExportDirBtn.style.background = '#2e7d32';
+            selectExportDirBtn.style.background = '#edf4fa';
+            selectExportDirBtn.style.color = '#174b78';
+            selectExportDirBtn.style.border = '1px solid #9eb6cb';
         } else {
             setButtonIconAndText(selectExportDirBtn, 'fa-solid fa-folder-open', 'Step 1: Select Export Directory');
-            selectExportDirBtn.style.background = '#546e7a';
+            selectExportDirBtn.style.background = '#f7f9fb';
+            selectExportDirBtn.style.color = '#486581';
+            selectExportDirBtn.style.border = '1px solid #d0d9e3';
         }
 
         const canExport = hasDir && !exportInProgress;
@@ -624,40 +827,41 @@ window.wosids = [];
 
     const exportProgressWrap = document.createElement('div');
     exportProgressWrap.style.display = 'none';
-    exportProgressWrap.style.padding = '6px 8px';
-    exportProgressWrap.style.background = 'rgba(255,255,255,0.1)';
-    exportProgressWrap.style.borderRadius = '4px';
+    exportProgressWrap.style.padding = '4px 0 0';
+    exportProgressWrap.style.background = 'transparent';
+    exportProgressWrap.style.border = 'none';
+    exportProgressWrap.style.borderRadius = '0';
 
     const exportProgressStepTitle = document.createElement('div');
     exportProgressStepTitle.textContent = 'Step 3: Export Progress';
-    exportProgressStepTitle.style.color = 'rgba(255,255,255,0.88)';
+    exportProgressStepTitle.style.color = '#486581';
     exportProgressStepTitle.style.fontSize = '10px';
-    exportProgressStepTitle.style.marginBottom = '4px';
+    exportProgressStepTitle.style.marginBottom = '2px';
 
     const exportProgressText = document.createElement('div');
-    exportProgressText.style.color = '#fff';
-    exportProgressText.style.fontSize = '11px';
-    exportProgressText.style.marginBottom = '4px';
+    exportProgressText.style.color = '#243b53';
+    exportProgressText.style.fontSize = '10px';
+    exportProgressText.style.marginBottom = '3px';
     exportProgressText.textContent = 'Waiting...';
 
     const exportProgressBar = document.createElement('div');
     exportProgressBar.style.width = '100%';
     exportProgressBar.style.height = '6px';
-    exportProgressBar.style.background = 'rgba(255,255,255,0.2)';
+    exportProgressBar.style.background = '#dde4ec';
     exportProgressBar.style.borderRadius = '999px';
     exportProgressBar.style.overflow = 'hidden';
 
     const exportProgressFill = document.createElement('div');
     exportProgressFill.style.width = '0%';
     exportProgressFill.style.height = '100%';
-    exportProgressFill.style.background = '#4caf50';
+    exportProgressFill.style.background = '#315f86';
     exportProgressFill.style.transition = 'width 0.2s ease';
     exportProgressBar.appendChild(exportProgressFill);
 
     const exportProgressDetail = document.createElement('div');
-    exportProgressDetail.style.color = 'rgba(255,255,255,0.85)';
+    exportProgressDetail.style.color = '#6b7c93';
     exportProgressDetail.style.fontSize = '10px';
-    exportProgressDetail.style.marginTop = '4px';
+    exportProgressDetail.style.marginTop = '3px';
     exportProgressDetail.textContent = '';
 
     exportProgressWrap.appendChild(exportProgressStepTitle);
@@ -675,11 +879,11 @@ window.wosids = [];
     } = {}) => {
         exportProgressWrap.style.display = visible ? 'block' : 'none';
         exportProgressText.textContent = statusText;
-        exportProgressText.style.color = isError ? '#ff8a80' : '#fff';
+        exportProgressText.style.color = isError ? '#a5483f' : '#243b53';
         exportProgressDetail.textContent = detailText;
         const ratio = total > 0 ? Math.max(0, Math.min(completed / total, 1)) : 0;
         exportProgressFill.style.width = `${Math.round(ratio * 100)}%`;
-        exportProgressFill.style.background = isError ? '#f44336' : '#4caf50';
+        exportProgressFill.style.background = isError ? '#a5483f' : '#315f86';
     };
 
     exportBtn.onclick = async () => {
@@ -834,14 +1038,16 @@ window.wosids = [];
 
     asyncDoiBtn.style.display = 'none';
     asyncDoiBtn.style.width = '100%';
-    asyncDoiBtn.style.padding = '10px 0';
-    asyncDoiBtn.style.background = '#ff9800';
+    asyncDoiBtn.style.padding = '4px 8px';
+    asyncDoiBtn.style.height = '24px';
+    asyncDoiBtn.style.background = '#ffffff';
     asyncDoiBtn.style.color = '#fff';
-    asyncDoiBtn.style.border = 'none';
-    asyncDoiBtn.style.borderRadius = '4px';
-    asyncDoiBtn.style.fontSize = '12px';
+    asyncDoiBtn.style.color = '#9a5b12';
+    asyncDoiBtn.style.border = '1px solid #e0c39e';
+    asyncDoiBtn.style.borderRadius = '2px';
+    asyncDoiBtn.style.fontSize = '11px';
     asyncDoiBtn.style.cursor = 'pointer';
-    asyncDoiBtn.style.boxShadow = '0 1px 4px rgba(0,0,0,0.08)';
+    asyncDoiBtn.style.boxShadow = 'none';
     asyncDoiBtn.disabled = false;
     updateAsyncDoiBtnText();
 
@@ -897,28 +1103,19 @@ window.wosids = [];
     exportFlowGroup.appendChild(exportProgressWrap);
     exportTabPanel.appendChild(exportFlowGroup);
 
-    // === WOS Query Builder Section ===
-    // 分隔线
-    const separator = document.createElement('div');
-    separator.style.width = '100%';
-    separator.style.height = '1px';
-    separator.style.background = 'rgba(255,255,255,0.2)';
-    separator.style.margin = '12px 0 8px 0';
-    queryTabPanel.appendChild(separator);
-
     // WOS Query 标题
     const queryTitle = document.createElement('div');
     queryTitle.textContent = 'WOS Query Builder';
-    queryTitle.style.color = '#fff';
-    queryTitle.style.fontSize = '13px';
-    queryTitle.style.fontWeight = 'bold';
-    queryTitle.style.marginBottom = '6px';
-    queryTabPanel.appendChild(queryTitle);
+    queryTitle.style.color = '#274c6b';
+    queryTitle.style.fontSize = '11px';
+    queryTitle.style.fontWeight = '600';
+    queryTitle.style.marginBottom = '2px';
+    builderTabPanel.appendChild(queryTitle);
 
     // WOS Query 输入和按钮行
     const wosQueryRow = document.createElement('div');
     wosQueryRow.style.display = 'flex';
-    wosQueryRow.style.gap = '6px';
+    wosQueryRow.style.gap = '4px';
     wosQueryRow.style.alignItems = 'stretch';
 
     // WOS Query 输入框
@@ -926,23 +1123,25 @@ window.wosids = [];
     wosQueryInput.type = 'text';
     wosQueryInput.placeholder = 'Enter natural language query...';
     wosQueryInput.style.flex = '1';
-    wosQueryInput.style.padding = '8px';
-    wosQueryInput.style.border = 'none';
-    wosQueryInput.style.borderRadius = '4px';
+    wosQueryInput.style.padding = '0 8px';
+    wosQueryInput.style.height = '24px';
+    wosQueryInput.style.border = '1px solid #e4ebf1';
+    wosQueryInput.style.borderRadius = '2px';
     wosQueryInput.style.outline = 'none';
-    wosQueryInput.style.fontSize = '12px';
-    wosQueryInput.style.background = 'rgba(255,255,255,0.9)';
+    wosQueryInput.style.fontSize = '11px';
+    wosQueryInput.style.background = '#ffffff';
 
     // WOS Query 提交按钮
     const wosQueryBtn = document.createElement('button');
     wosQueryBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i>';
-    wosQueryBtn.style.padding = '8px 16px';
-    wosQueryBtn.style.background = 'rgba(33, 150, 243, 0.9)';
+    wosQueryBtn.style.padding = '3px 10px';
+    wosQueryBtn.style.height = '24px';
+    wosQueryBtn.style.background = '#174b78';
     wosQueryBtn.style.color = '#fff';
-    wosQueryBtn.style.border = 'none';
-    wosQueryBtn.style.borderRadius = '4px';
+    wosQueryBtn.style.border = '1px solid #123a5c';
+    wosQueryBtn.style.borderRadius = '2px';
     wosQueryBtn.style.cursor = 'pointer';
-    wosQueryBtn.style.fontSize = '14px';
+    wosQueryBtn.style.fontSize = '11px';
     wosQueryBtn.style.outline = 'none';
     wosQueryBtn.style.whiteSpace = 'nowrap';
     wosQueryBtn.style.display = 'flex';
@@ -1145,12 +1344,14 @@ window.wosids = [];
 
     wosQueryRow.appendChild(wosQueryInput);
     wosQueryRow.appendChild(wosQueryBtn);
-    queryTabPanel.appendChild(wosQueryRow);
+    builderTabPanel.appendChild(wosQueryRow);
+    box.appendChild(resizeHandle);
 
     document.body.appendChild(box);
 
     // 预先声明事件处理器和清理函数
     let dragger = null;
+    let resizeCleanup = null;
     let visibilityHandler, showHandler, hideHandler;
 
     // 清理函数
@@ -1158,6 +1359,7 @@ window.wosids = [];
         console.log("[WOS DOI Query] Cleaning up resources...");
         // 销毁拖动功能
         dragger?.destroy();
+        resizeCleanup?.();
         // 移除所有事件监听器
         if (visibilityHandler) document.removeEventListener("__WOS_DOI_QUERY_VISIBILITY__", visibilityHandler);
         if (showHandler) document.removeEventListener("__SHOW_WOS_DOI_QUERY__", showHandler);
@@ -1178,6 +1380,59 @@ window.wosids = [];
         topKey: POSITION_TOP_KEY,
         leftKey: POSITION_LEFT_KEY
     });
+
+    {
+        let isResizing = false;
+        let startX = 0;
+        let startY = 0;
+        let startWidth = 0;
+        let startHeight = 0;
+
+        const onResizeMouseMove = (e) => {
+            if (!isResizing) return;
+            const nextWidth = Math.min(
+                Math.max(260, startWidth + (e.clientX - startX)),
+                window.innerWidth - 16
+            );
+            const nextHeight = Math.min(
+                Math.max(320, startHeight + (e.clientY - startY)),
+                window.innerHeight - 16
+            );
+            box.style.width = `${Math.round(nextWidth)}px`;
+            box.style.height = `${Math.round(nextHeight)}px`;
+        };
+
+        const onResizeMouseUp = () => {
+            if (!isResizing) return;
+            isResizing = false;
+            writeStorage(WIDTH_KEY, box.style.width);
+            writeStorage(HEIGHT_KEY, box.style.height);
+            ensurePanelInView();
+            document.body.style.userSelect = "";
+        };
+
+        const onResizeMouseDown = (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = box.offsetWidth;
+            startHeight = box.offsetHeight;
+            document.body.style.userSelect = "none";
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        resizeHandle.addEventListener("mousedown", onResizeMouseDown);
+        document.addEventListener("mousemove", onResizeMouseMove);
+        document.addEventListener("mouseup", onResizeMouseUp);
+
+        resizeCleanup = () => {
+            resizeHandle.removeEventListener("mousedown", onResizeMouseDown);
+            document.removeEventListener("mousemove", onResizeMouseMove);
+            document.removeEventListener("mouseup", onResizeMouseUp);
+            document.body.style.userSelect = "";
+        };
+    }
 
     const ensurePanelInView = () => {
         const width = box.offsetWidth || 350;

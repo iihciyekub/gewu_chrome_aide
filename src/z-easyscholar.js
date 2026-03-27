@@ -231,6 +231,7 @@ async function getPublicationRank(SO) {
     const POSITION_LEFT_KEY = "wos-easyscholar-panel-left";
     const SETTINGS_VISIBLE_KEY = "wos-easyscholar-panel-settings-visible";
     const API_KEY_STORAGE = "wos-easyscholar-api-key";
+    const API_KEY_SYNC_EVENT = "__EASYSCHOLAR_API_KEY_SYNC__";
     const savedTop = localStorage.getItem(POSITION_TOP_KEY) || "100px";
     const savedLeft = localStorage.getItem(POSITION_LEFT_KEY) || null;
     const savedSettingsVisible = localStorage.getItem(SETTINGS_VISIBLE_KEY);
@@ -447,6 +448,16 @@ async function getPublicationRank(SO) {
     // Store actual API key value
     let actualApiKey = savedApiKey.trim();
     let isApiFocused = false;
+
+    const handleApiKeySync = (event) => {
+        const syncedApiKey = (event?.detail?.apiKey || "").trim();
+        actualApiKey = syncedApiKey;
+        window.easyscholar_api_key = syncedApiKey;
+        if (!isApiFocused) {
+            apiInput.value = maskApiKey(actualApiKey);
+        }
+    };
+    document.addEventListener(API_KEY_SYNC_EVENT, handleApiKeySync);
 
     // Show full content on focus
     apiInput.addEventListener("focus", () => {
@@ -1154,6 +1165,9 @@ async function getPublicationRank(SO) {
 
     // 监听来自 content script 的可见性控制事件
     const visibilityHandler = (e) => {
+        if (box.dataset.embeddedInBatchQuery === 'true') {
+            return;
+        }
         console.log("[EasyScholar] Visibility event received:", e.detail);
         if (e.detail && typeof e.detail.visible === 'boolean') {
             const visible = e.detail.visible;
@@ -1177,6 +1191,7 @@ async function getPublicationRank(SO) {
         console.log("[EasyScholar] Cleaning up resources...");
         // 移除所有全局事件监听器
         document.removeEventListener("__EASYSCHOLAR_VISIBILITY__", visibilityHandler);
+        document.removeEventListener(API_KEY_SYNC_EVENT, handleApiKeySync);
         document.removeEventListener("keydown", keydownModifierHandler);
         document.removeEventListener("keyup", keyupModifierHandler);
         document.removeEventListener("mouseover", globalHoverListener);

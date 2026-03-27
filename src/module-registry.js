@@ -26,7 +26,7 @@ export const MODULE_REGISTRY = {
   wosDoiQuery: {
     id: 'wosDoiQuery',
     name: 'DOI Batch Query',
-    files: ['pub-fun.js', 'z-wos-doi-query.js'],
+    files: ['pub-fun.js', 'z-easyscholar.js', 'z-wos-doi-query.js'],
     elementId: 'clipboard-reader-box',
     visibilityKey: 'clipboard-reader-box-visible',
     enabledKey: 'wosDoiQueryEnabled',
