@@ -23,6 +23,9 @@ import './popup.css';
   const statusClasses = ['status--success', 'status--error', 'status--info', 'status--muted'];
 
   const setStatus = (element, message, variant) => {
+    if (!element) {
+      return;
+    }
     element.textContent = message;
     element.classList.remove(...statusClasses);
     if (variant) {
@@ -158,7 +161,7 @@ import './popup.css';
 
     const openWosDoiQueryBtn = document.getElementById('openWosDoiQueryBtn');
     const openDoiPdfDownloadBtn = document.getElementById('openDoiPdfDownloadBtn');
-    const sidDisplay = document.getElementById('sidDisplay');
+    const sidDisplay = null;
 
     // 新增：DOI列表显示区域和清空按钮
 
@@ -298,12 +301,10 @@ import './popup.css';
       chrome.storage.local.set({ [CHAT_API_KEY_STORAGE_KEY]: apiKey }, () => {
         if (chrome.runtime.lastError) {
           updateApiKeyHint('Failed to save API key.', 'status--error');
-          setStatus(sidDisplay, 'Failed to save API key', 'status--error');
           return;
         }
         setProviderVerifiedState('openai', false);
         updateApiKeyHint('API key saved for all pages.', 'status--success');
-        setStatus(sidDisplay, 'API key saved', 'status--success');
       });
     };
 
@@ -314,13 +315,11 @@ import './popup.css';
       }, () => {
         if (chrome.runtime.lastError) {
           updateEasyScholarApiKeyHint('Failed to save EasyScholar state.', 'status--error');
-          setStatus(sidDisplay, 'Failed to save EasyScholar state', 'status--error');
           return;
         }
         currentEasyScholarApiKey = apiKey;
         currentEasyScholarVerified = Boolean(verified);
         updateEasyScholarApiKeyHint(hintMessage, hintVariant);
-        setStatus(sidDisplay, statusMessage, statusVariant);
         syncEasyScholarStateToActiveTab(apiKey, verified);
       });
     };
@@ -329,7 +328,6 @@ import './popup.css';
       const key = (apiKey || '').trim();
       if (key === currentEasyScholarApiKey && currentEasyScholarVerified) {
         updateEasyScholarApiKeyHint('Verified. Journal Query is available.', 'status--success');
-        setStatus(sidDisplay, 'EasyScholar key already verified', 'status--success');
         syncEasyScholarStateToActiveTab(key, true);
         return;
       }

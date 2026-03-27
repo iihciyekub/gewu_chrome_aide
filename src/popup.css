@@ -148,19 +148,6 @@ body {
     box-shadow: 0 0 0 2px rgba(43, 92, 138, 0.35);
 }
 
-.status {
-    width: 100%;
-    min-height: 20px;
-    padding: 6px 10px;
-    border-radius: 8px;
-    font-size: 11px;
-    color: var(--status);
-    background: rgba(255, 255, 255, 0.85);
-    border: 1px solid rgba(54, 46, 35, 0.12);
-    word-break: break-all;
-}
-
-
 .status--success {
     color: #2f7c55;
 }
