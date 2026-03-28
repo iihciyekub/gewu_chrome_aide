@@ -14,6 +14,7 @@ import './popup.css';
   const LM_STUDIO_API_KEY_STORAGE_KEY = 'wosLmStudioApiKey';
   const EASYSCHOLAR_API_KEY_STORAGE_KEY = 'wos-easyscholar-api-key';
   const EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY = 'wos-easyscholar-api-key-verified';
+  const EASYSCHOLAR_ENABLED_STORAGE_KEY = 'easyscholarEnabled';
   const OPENAI_SETTINGS_COLLAPSED_KEY = 'wosOpenaiSettingsCollapsed';
   const EASYSCHOLAR_SETTINGS_COLLAPSED_KEY = 'wosEasyScholarSettingsCollapsed';
   const EASYSCHOLAR_API_KEY_SYNC_EVENT = '__EASYSCHOLAR_API_KEY_SYNC__';
@@ -178,6 +179,7 @@ import './popup.css';
     const openaiModelSelectRow = document.getElementById('openaiModelSelectRow');
     const openaiModelSelect = document.getElementById('openaiModelSelect');
     const easyScholarApiKeyInput = document.getElementById('easyScholarApiKeyInput');
+    const easyScholarEnabledToggle = document.getElementById('easyScholarEnabledToggle');
     const easyScholarApiKeyToggleBtn = document.getElementById('easyScholarApiKeyToggle');
     const easyScholarApiKeySaveBtn = document.getElementById('easyScholarApiKeySaveBtn');
     const easyScholarApiKeyTestBtn = document.getElementById('easyScholarApiKeyTestBtn');
@@ -258,6 +260,7 @@ import './popup.css';
     let isDoiPdfDownloadEnabled = false;
     let currentEasyScholarApiKey = '';
     let currentEasyScholarVerified = false;
+    let currentEasyScholarEnabled = false;
     let currentWosQueryProvider = 'openai';
     let currentWosQueryEnabled = false;
     let currentOpenAIVerified = false;
@@ -285,7 +288,19 @@ import './popup.css';
       }
     };
 
-    const syncEasyScholarStateToTab = (tabId, apiKey, verified, onComplete) => {
+    const syncEasyScholarHintFromState = () => {
+      if (!currentEasyScholarEnabled) {
+        updateEasyScholarApiKeyHint('Journal Query is disabled.', 'status--muted');
+        return;
+      }
+      if (currentEasyScholarVerified) {
+        updateEasyScholarApiKeyHint('Verified. Journal Query is available.', 'status--success');
+        return;
+      }
+      updateEasyScholarApiKeyHint('Enabled, but the key must pass Test before Journal Query appears.', 'status--info');
+    };
+
+    const syncEasyScholarStateToTab = (tabId, apiKey, verified, enabled, onComplete) => {
       if (!chrome.scripting || !chrome.scripting.executeScript) {
         onComplete(new Error('chrome.scripting is unavailable'));
         return;
@@ -294,15 +309,19 @@ import './popup.css';
           {
             target: { tabId },
             world: 'MAIN',
-          func: (storageKey, storageValue, verifiedKey, verifiedValue, eventName) => {
+          func: (storageKey, storageValue, verifiedKey, verifiedValue, enabledKey, enabledValue, eventName) => {
             try {
               localStorage.setItem(storageKey, storageValue);
               localStorage.setItem(verifiedKey, String(Boolean(verifiedValue)));
+              localStorage.setItem(enabledKey, String(Boolean(enabledValue)));
             } catch (error) {
               // Ignore storage failures in restricted contexts.
             }
             document.dispatchEvent(new CustomEvent(eventName, {
-              detail: { verified: Boolean(verifiedValue) }
+              detail: {
+                enabled: Boolean(enabledValue),
+                verified: Boolean(verifiedValue)
+              }
             }));
           },
           args: [
@@ -310,6 +329,8 @@ import './popup.css';
             apiKey,
             EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY,
             verified,
+            EASYSCHOLAR_ENABLED_STORAGE_KEY,
+            enabled,
             EASYSCHOLAR_API_KEY_SYNC_EVENT
           ],
         },
@@ -323,12 +344,12 @@ import './popup.css';
       );
     };
 
-    const syncEasyScholarStateToActiveTab = (apiKey, verified) => {
+    const syncEasyScholarStateToActiveTab = (apiKey, verified, enabled = currentEasyScholarEnabled) => {
       withActiveTab((tab) => {
         if (!tab) {
           return;
         }
-        syncEasyScholarStateToTab(tab.id, apiKey, verified, (error) => {
+        syncEasyScholarStateToTab(tab.id, apiKey, verified, enabled, (error) => {
           if (error) {
             console.warn('Failed to sync EasyScholar state to page:', error.message);
           }
@@ -363,10 +384,31 @@ import './popup.css';
       });
     };
 
+    const saveEasyScholarEnabled = (enabled) => {
+      currentEasyScholarEnabled = Boolean(enabled);
+      chrome.storage.local.set({ [EASYSCHOLAR_ENABLED_STORAGE_KEY]: currentEasyScholarEnabled }, () => {
+        if (chrome.runtime.lastError) {
+          updateEasyScholarApiKeyHint('Failed to save Journal Query enabled state.', 'status--error');
+          setStatus(sidDisplay, 'Failed to save Journal Query state', 'status--error');
+          return;
+        }
+        if (easyScholarEnabledToggle) {
+          easyScholarEnabledToggle.checked = currentEasyScholarEnabled;
+        }
+        syncEasyScholarHintFromState();
+        syncEasyScholarStateToActiveTab(currentEasyScholarApiKey, currentEasyScholarVerified, currentEasyScholarEnabled);
+        setStatus(
+          sidDisplay,
+          currentEasyScholarEnabled ? 'Journal Query enabled' : 'Journal Query disabled',
+          currentEasyScholarEnabled ? 'status--success' : 'status--muted'
+        );
+      });
+    };
+
     const saveEasyScholarApiKey = (apiKey) => {
       const key = (apiKey || '').trim();
       if (key === currentEasyScholarApiKey && currentEasyScholarVerified) {
-        updateEasyScholarApiKeyHint('Verified. Journal Query is available.', 'status--success');
+        syncEasyScholarHintFromState();
         syncEasyScholarStateToActiveTab(key, true);
         return;
       }
@@ -462,10 +504,14 @@ import './popup.css';
       chrome.storage.local.get([EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY], result => {
         const verified = Boolean(result[EASYSCHOLAR_API_KEY_VERIFIED_STORAGE_KEY]);
         currentEasyScholarVerified = verified;
-        updateEasyScholarApiKeyHint(
-          verified ? 'Verified. Journal Query is available.' : 'Only verified keys can enable Journal Query.',
-          verified ? 'status--success' : 'status--muted'
-        );
+        syncEasyScholarHintFromState();
+      });
+      chrome.storage.local.get([EASYSCHOLAR_ENABLED_STORAGE_KEY], result => {
+        currentEasyScholarEnabled = Boolean(result[EASYSCHOLAR_ENABLED_STORAGE_KEY]);
+        if (easyScholarEnabledToggle) {
+          easyScholarEnabledToggle.checked = currentEasyScholarEnabled;
+        }
+        syncEasyScholarHintFromState();
       });
 
       easyScholarApiKeyInput.addEventListener('keydown', (event) => {
@@ -477,6 +523,12 @@ import './popup.css';
 
       easyScholarApiKeyInput.addEventListener('blur', () => {
         saveEasyScholarApiKey(easyScholarApiKeyInput.value.trim());
+      });
+    }
+
+    if (easyScholarEnabledToggle) {
+      easyScholarEnabledToggle.addEventListener('change', () => {
+        saveEasyScholarEnabled(easyScholarEnabledToggle.checked);
       });
     }
 
@@ -1273,7 +1325,9 @@ import './popup.css';
             if (response && response.success) {
               setStatus(
                 sidDisplay,
-                isWosDoiQueryEnabled ? 'DOI batch query enabled' : 'DOI batch query disabled',
+                isWosDoiQueryEnabled
+                  ? (response.toolbarShortcutsReady ? 'DOI batch query toolbar enabled' : 'DOI batch query enabled')
+                  : 'DOI batch query disabled',
                 'status--success'
               );
             } else {

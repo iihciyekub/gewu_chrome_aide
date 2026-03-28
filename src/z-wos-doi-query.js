@@ -189,6 +189,7 @@ window.wosids = [];
     const HISTORY_KEY = "clipboard-reader-box-history";
     const WOS_QUERY_HISTORY_KEY = "wos-query-builder-history";
     const EASYSCHOLAR_VERIFIED_KEY = "wos-easyscholar-api-key-verified";
+    const EASYSCHOLAR_ENABLED_KEY = "easyscholarEnabled";
     const EASYSCHOLAR_SYNC_EVENT = "__EASYSCHOLAR_API_KEY_SYNC__";
     const CHAT_API_KEY_STORAGE_KEY = "wosOpenaiApiKey";
     const CHAT_MODEL_STORAGE_KEY = "wosOpenaiChatModel";
@@ -213,9 +214,9 @@ window.wosids = [];
     const COLLAPSED_HEIGHT = 40;
     const SINGLE_PANEL_DEFAULTS = {
         query: { width: 320, height: 420 },
-        export: { width: 360, height: 380 },
-        journal: { width: 420, height: 420 },
-        builder: { width: 360, height: 320 }
+        export: { width: 700, height: 250 },
+        journal: { width: 520, height: 420 },
+        builder: { width: 500, height: 220 }
     };
 
     // 历史记录管理
@@ -674,31 +675,9 @@ window.wosids = [];
         }
     };
 
-    const autoResizeForJournalTab = (contentHeight = 0) => {
-        if (isCollapsed || box.style.display === 'none' || journalTabPanel.style.display === 'none') {
-            return;
-        }
-
-        requestAnimationFrame(() => {
-            const controlHeight = controlRow.offsetHeight || 40;
-            const tabHeight = tabRow.offsetHeight || 32;
-            const wrapStyle = window.getComputedStyle(tabContentWrap);
-            const wrapPaddingTop = parseFloat(wrapStyle.paddingTop || '0') || 0;
-            const wrapPaddingBottom = parseFloat(wrapStyle.paddingBottom || '0') || 0;
-            const journalContentHeight = Math.max(
-                contentHeight || 0,
-                journalTabPanel.scrollHeight || 0
-            );
-            const desiredHeight = Math.ceil(
-                controlHeight + tabHeight + wrapPaddingTop + wrapPaddingBottom + journalContentHeight
-            );
-            const nextHeight = Math.max(currentPanelMode === 'single' ? 120 : 320, desiredHeight);
-            expandedHeightPx = nextHeight;
-            box.style.height = `${nextHeight}px`;
-            box.style.minHeight = currentPanelMode === 'single' ? `0px` : `${nextHeight}px`;
-            writeStorage(HEIGHT_KEY, box.style.height);
-            ensurePanelInView();
-        });
+    const autoResizeForJournalTab = () => {
+        // Keep journal panel height stable. Query results should scroll inside the panel
+        // instead of growing the parent container on each render.
     };
 
     const applyCollapsedState = () => {
@@ -720,6 +699,16 @@ window.wosids = [];
             saveSinglePanelLayout(currentActiveTab, box.offsetWidth, expandedHeightPx);
         }
         ensurePanelInView();
+    };
+
+    const emitPanelState = () => {
+        document.dispatchEvent(new CustomEvent(PANEL_STATE_EVENT, {
+            detail: {
+                mode: currentPanelMode,
+                tab: currentActiveTab,
+                visible: box.style.display !== 'none'
+            }
+        }));
     };
 
     const queryTabPanel = document.createElement('div');
@@ -814,10 +803,10 @@ window.wosids = [];
     builderTabBtn.onclick = () => setActiveTab('builder');
     setActiveTab('query');
 
-    const applyJournalAccess = (verified) => {
-        const isVerified = Boolean(verified);
-        journalTabBtn.style.display = isVerified ? 'block' : 'none';
-        if (!isVerified && journalTabPanel.style.display !== 'none') {
+    const applyJournalAccess = ({ enabled = false, verified = false } = {}) => {
+        const isAllowed = Boolean(enabled) && Boolean(verified);
+        journalTabBtn.style.display = isAllowed ? 'block' : 'none';
+        if (!isAllowed && journalTabPanel.style.display !== 'none') {
             setActiveTab('query');
         }
     };
@@ -925,19 +914,29 @@ window.wosids = [];
             document.dispatchEvent(new CustomEvent(PANEL_STATE_EVENT, {
                 detail: {
                     mode: currentPanelMode,
-                    tab: currentActiveTab
+                    tab: currentActiveTab,
+                    visible: box.style.display !== 'none'
                 }
             }));
         }
     });
 
-    requestStorage("get", EASYSCHOLAR_VERIFIED_KEY).then((value) => {
-        applyJournalAccess(value === true || value === "true");
+    Promise.all([
+        requestStorage("get", EASYSCHOLAR_ENABLED_KEY),
+        requestStorage("get", EASYSCHOLAR_VERIFIED_KEY)
+    ]).then(([enabled, verified]) => {
+        applyJournalAccess({
+            enabled: enabled === true || enabled === "true",
+            verified: verified === true || verified === "true"
+        });
     });
     refreshWosQueryAccess();
 
     document.addEventListener(EASYSCHOLAR_SYNC_EVENT, (event) => {
-        applyJournalAccess(Boolean(event?.detail?.verified));
+        applyJournalAccess({
+            enabled: Boolean(event?.detail?.enabled),
+            verified: Boolean(event?.detail?.verified)
+        });
     });
 
     document.addEventListener(WOS_QUERY_ACCESS_SYNC_EVENT, (event) => {
@@ -1216,7 +1215,13 @@ window.wosids = [];
     exportFlowGroup.appendChild(exportFlowTitle);
     exportFlowGroup.appendChild(exportFlowHint);
 
+    const exportUuidInfoRow = document.createElement('div');
+    exportUuidInfoRow.style.display = 'flex';
+    exportUuidInfoRow.style.alignItems = 'center';
+    exportUuidInfoRow.style.gap = '6px';
+
     const exportUuidInfo = document.createElement('div');
+    exportUuidInfo.style.flex = '1';
     exportUuidInfo.style.padding = '5px 7px';
     exportUuidInfo.style.background = '#f7f9fb';
     exportUuidInfo.style.border = '1px solid #d0d9e3';
@@ -1225,7 +1230,28 @@ window.wosids = [];
     exportUuidInfo.style.fontSize = '10px';
     exportUuidInfo.style.lineHeight = '1.4';
     exportUuidInfo.textContent = 'Current UUID: Loading...';
-    exportFlowGroup.appendChild(exportUuidInfo);
+
+    const exportUuidRefreshBtn = document.createElement('button');
+    exportUuidRefreshBtn.type = 'button';
+    exportUuidRefreshBtn.innerHTML = '<i class="fa-solid fa-rotate-right"></i>';
+    exportUuidRefreshBtn.style.width = '24px';
+    exportUuidRefreshBtn.style.height = '24px';
+    exportUuidRefreshBtn.style.flexShrink = '0';
+    exportUuidRefreshBtn.style.display = 'inline-flex';
+    exportUuidRefreshBtn.style.alignItems = 'center';
+    exportUuidRefreshBtn.style.justifyContent = 'center';
+    exportUuidRefreshBtn.style.padding = '0';
+    exportUuidRefreshBtn.style.border = '1px solid #d0d9e3';
+    exportUuidRefreshBtn.style.borderRadius = '2px';
+    exportUuidRefreshBtn.style.background = '#f7f9fb';
+    exportUuidRefreshBtn.style.color = '#486581';
+    exportUuidRefreshBtn.style.cursor = 'pointer';
+    exportUuidRefreshBtn.style.boxShadow = 'none';
+    exportUuidRefreshBtn.title = 'Refresh current page UUID';
+
+    exportUuidInfoRow.appendChild(exportUuidInfo);
+    exportUuidInfoRow.appendChild(exportUuidRefreshBtn);
+    exportFlowGroup.appendChild(exportUuidInfoRow);
 
     const exportUuidJumpWrap = document.createElement('div');
     exportUuidJumpWrap.style.display = 'none';
@@ -1370,7 +1396,7 @@ window.wosids = [];
         exportUuidFormatHint.style.color = '#a5483f';
     };
 
-    const refreshExportUuidInfo = () => {
+    const refreshExportUuidInfo = ({ syncInput = true } = {}) => {
         const uuid = extractUuidFromCurrentUrl();
 
         if (!uuid) {
@@ -1382,8 +1408,16 @@ window.wosids = [];
 
         exportUuidInfo.textContent = `Current UUID: ${uuid}`;
         exportUuidInfo.style.color = '#243b53';
+        if (syncInput) {
+            exportUuidInput.value = uuid;
+            syncExportUuidInputHint(uuid);
+        }
         syncExportUuidMode(uuid);
         return uuid;
+    };
+
+    exportUuidRefreshBtn.onclick = () => {
+        refreshExportUuidInfo({ syncInput: true });
     };
 
     const selectExportDirBtn = document.createElement('button');
@@ -2277,6 +2311,7 @@ Additional output rules:
         e.stopPropagation();
         box.style.display = "none";
         writeStorage(VISIBILITY_KEY, "false");
+        emitPanelState();
     };
 
     singlePanelResetBtn.onclick = (e) => {
@@ -2456,6 +2491,7 @@ Additional output rules:
             if (visible) {
                 ensurePanelInView();
             }
+            emitPanelState();
         }
     };
     document.addEventListener("__WOS_DOI_QUERY_VISIBILITY__", visibilityHandler);
@@ -2464,6 +2500,7 @@ Additional output rules:
     showHandler = () => {
         box.style.display = "flex";
         writeStorage(VISIBILITY_KEY, "true");
+        emitPanelState();
         console.log("[WOS DOI Query] Panel shown");
     };
     document.addEventListener("__SHOW_WOS_DOI_QUERY__", showHandler);
@@ -2472,6 +2509,7 @@ Additional output rules:
     hideHandler = () => {
         box.style.display = "none";
         writeStorage(VISIBILITY_KEY, "false");
+        emitPanelState();
         console.log("[WOS DOI Query] Panel hidden");
     };
     document.addEventListener("__HIDE_WOS_DOI_QUERY__", hideHandler);

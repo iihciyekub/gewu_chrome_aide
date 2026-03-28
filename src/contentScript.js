@@ -175,6 +175,106 @@ const WOS_TOOLBAR_SHORTCUTS_ID = 'wos-aide-toolbar-shortcuts';
 const WOS_TOOLBAR_SHORTCUTS_STYLE_ID = 'wos-aide-toolbar-shortcuts-style';
 const WOS_DOI_QUERY_PANEL_MODE_EVENT = '__WOS_DOI_QUERY_PANEL_MODE__';
 const WOS_DOI_QUERY_PANEL_STATE_EVENT = '__WOS_DOI_QUERY_PANEL_STATE__';
+let isEasyScholarEnabledForToolbar = false;
+let isWosQueryEnabledForToolbar = false;
+let currentToolbarPanelMode = 'batch';
+let currentToolbarPanelTab = '';
+const getWosToolbarShortcutDefinitions = () => {
+  const buttons = [
+    {
+      id: 'doi-query',
+      title: 'DOI Query',
+      iconHtml: '<i class="fa-solid fa-magnifying-glass wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      preferredTab: 'query'
+    },
+    {
+      id: 'wos-export',
+      title: 'WOS Data Export',
+      iconHtml: '<i class="fa-regular fa-circle-down wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      preferredTab: 'export'
+    }
+  ];
+
+  if (isEasyScholarEnabledForToolbar) {
+    buttons.push({
+      id: 'journal-query',
+      title: 'Journal Query',
+      iconHtml: '<i class="fa-regular fa-newspaper wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      preferredTab: 'journal'
+    });
+  }
+
+  if (isWosQueryEnabledForToolbar) {
+    buttons.push({
+      id: 'wos-query',
+      title: 'WOS Query',
+      iconHtml: '<i class="fa-regular fa-comment-dots wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      preferredTab: 'builder'
+    });
+  }
+
+  return buttons;
+};
+
+const renderWosToolbarShortcutButtons = (shortcutsWrap) => {
+  if (!shortcutsWrap) {
+    return;
+  }
+
+  shortcutsWrap.replaceChildren();
+  const buttons = getWosToolbarShortcutDefinitions();
+
+  buttons.forEach(({ id, title, iconHtml, preferredTab }) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wos-aide-toolbar-btn';
+    button.dataset.wosAideShortcut = id;
+    button.dataset.wosAideTab = preferredTab;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.innerHTML = iconHtml;
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const currentState = getCurrentWosDoiQueryPanelState();
+      if (currentState.visible && currentState.mode === 'single' && currentState.tab === preferredTab) {
+        const panelElement = document.getElementById(MODULES.wosDoiQuery.elementId);
+        if (panelElement) {
+          panelElement.style.display = 'none';
+          setModuleVisibility('wosDoiQuery', false);
+        }
+        return;
+      }
+      const rect = button.getBoundingClientRect();
+      openWosDoiQueryPanel(preferredTab, 'single', {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height
+      });
+    });
+    shortcutsWrap.appendChild(button);
+  });
+
+  syncWosToolbarShortcutActiveState();
+};
+
+const syncWosToolbarShortcutActiveState = () => {
+  const shortcutsWrap = document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID);
+  if (!shortcutsWrap) {
+    return;
+  }
+
+  const panelElement = document.getElementById(MODULES.wosDoiQuery.elementId);
+  const isPanelVisible = Boolean(panelElement && panelElement.style.display !== 'none' && !panelElement.hidden);
+  const activeTab = isPanelVisible && currentToolbarPanelMode === 'single' ? currentToolbarPanelTab : '';
+
+  shortcutsWrap.querySelectorAll('.wos-aide-toolbar-btn').forEach((button) => {
+    const isActive = Boolean(activeTab) && button.dataset.wosAideTab === activeTab;
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+};
 const getCurrentWosDoiQueryPanelState = () => {
   const element = document.getElementById(MODULES.wosDoiQuery.elementId);
   if (!element || element.style.display === 'none' || element.hidden) {
@@ -392,6 +492,14 @@ const openWosDoiQueryPanel = (preferredTab, presentation = 'batch', anchorRect =
   return { success: true, visible: true, action: 'injected' };
 };
 
+const ensureWosToolbarShortcutsReady = () => {
+  if (!isWosPage()) {
+    return false;
+  }
+  ensureWosToolbarShortcuts();
+  return Boolean(document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID));
+};
+
 const toggleWosDoiQueryPanel = (preferredTab) => {
   const element = document.getElementById(MODULES.wosDoiQuery.elementId);
   const switchTab = () => {
@@ -446,10 +554,10 @@ const ensureWosToolbarShortcutsStyle = () => {
   padding: 6px 0;
 }
 #${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn {
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   border: none;
-  border-radius: 0;
+  border-radius: 12px;
   background: transparent;
   color: #4a3b88;
   display: inline-flex;
@@ -457,17 +565,40 @@ const ensureWosToolbarShortcutsStyle = () => {
   justify-content: center;
   cursor: pointer;
   box-shadow: none;
-  transition: transform 0.14s ease, color 0.14s ease, opacity 0.14s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease, border-radius 0.16s ease;
   padding: 0;
   appearance: none;
+  box-sizing: border-box;
+  outline: none;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
 }
 #${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn:hover {
-  transform: translateY(-1px);
-  opacity: 0.82;
+  background: #f1f1f4;
+  border-radius: 999px;
+  color: #4a3b88;
+}
+#${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn:active {
+  background: #eef0f3;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  border-radius: 999px;
+}
+#${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn.is-active {
+  background: #eef0f3;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  border-radius: 999px;
+  color: #4a3b88;
 }
 #${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn:focus-visible {
-  outline: 2px solid rgba(100, 92, 171, 0.22);
-  outline-offset: 2px;
+  outline: none;
+  border: none;
+  box-shadow: none;
+  background: #eef0f3;
+  border-radius: 999px;
 }
 #${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-icon {
   font-size: 24px;
@@ -490,6 +621,14 @@ const ensureWosToolbarShortcuts = () => {
 
   const existing = document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID);
   if (existing) {
+    const desiredShortcutIds = getWosToolbarShortcutDefinitions().map(({ id }) => id).join(',');
+    const currentShortcutIds = Array.from(existing.querySelectorAll('[data-wos-aide-shortcut]'))
+      .map((button) => button.dataset.wosAideShortcut || '')
+      .join(',');
+    if (currentShortcutIds !== desiredShortcutIds) {
+      renderWosToolbarShortcutButtons(existing);
+    }
+    syncWosToolbarShortcutActiveState();
     if (toolbar) {
       const existingParent = existing.parentElement;
       const anchorParent = alertsButton?.parentElement || null;
@@ -512,64 +651,7 @@ const ensureWosToolbarShortcuts = () => {
 
   const shortcutsWrap = document.createElement('div');
   shortcutsWrap.id = WOS_TOOLBAR_SHORTCUTS_ID;
-
-  const buttons = [
-    {
-      id: 'doi-query',
-      title: 'DOI Query',
-      iconHtml: '<i class="fa-solid fa-magnifying-glass wos-aide-toolbar-icon" aria-hidden="true"></i>',
-      preferredTab: 'query'
-    },
-    {
-      id: 'wos-export',
-      title: 'WOS Data Export',
-      iconHtml: '<i class="fa-regular fa-circle-down wos-aide-toolbar-icon" aria-hidden="true"></i>',
-      preferredTab: 'export'
-    },
-    {
-      id: 'journal-query',
-      title: 'Journal Query',
-      iconHtml: '<i class="fa-regular fa-newspaper wos-aide-toolbar-icon" aria-hidden="true"></i>',
-      preferredTab: 'journal'
-    },
-    {
-      id: 'wos-query',
-      title: 'WOS Query',
-      iconHtml: '<i class="fa-regular fa-comment-dots wos-aide-toolbar-icon" aria-hidden="true"></i>',
-      preferredTab: 'builder'
-    }
-  ];
-
-  buttons.forEach(({ id, title, iconHtml, preferredTab }) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'wos-aide-toolbar-btn';
-    button.dataset.wosAideShortcut = id;
-    button.title = title;
-    button.setAttribute('aria-label', title);
-    button.innerHTML = iconHtml;
-    button.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const currentState = getCurrentWosDoiQueryPanelState();
-      if (currentState.visible && currentState.mode === 'single' && currentState.tab === preferredTab) {
-        const panelElement = document.getElementById(MODULES.wosDoiQuery.elementId);
-        if (panelElement) {
-          panelElement.style.display = 'none';
-          setModuleVisibility('wosDoiQuery', false);
-        }
-        return;
-      }
-      const rect = button.getBoundingClientRect();
-      openWosDoiQueryPanel(preferredTab, 'single', {
-        top: rect.top,
-        left: rect.left,
-        width: rect.width,
-        height: rect.height
-      });
-    });
-    shortcutsWrap.appendChild(button);
-  });
+  renderWosToolbarShortcutButtons(shortcutsWrap);
 
   if (toolbar) {
     shortcutsWrap.dataset.floatingFallback = 'false';
@@ -584,6 +666,34 @@ const ensureWosToolbarShortcuts = () => {
     (document.body || document.documentElement).appendChild(shortcutsWrap);
   }
 };
+
+document.addEventListener(WOS_DOI_QUERY_PANEL_MODE_EVENT, (event) => {
+  currentToolbarPanelMode = event?.detail?.mode === 'single' ? 'single' : 'batch';
+  if (event?.detail?.tab) {
+    currentToolbarPanelTab = event.detail.tab;
+  }
+  requestAnimationFrame(() => {
+    syncWosToolbarShortcutActiveState();
+  });
+});
+
+document.addEventListener(WOS_DOI_QUERY_PANEL_STATE_EVENT, (event) => {
+  if (event?.detail?.requestState) {
+    return;
+  }
+  requestAnimationFrame(() => {
+    syncWosToolbarShortcutActiveState();
+  });
+});
+
+document.addEventListener('__WOS_DOI_QUERY_SWITCH_TAB__', (event) => {
+  if (event?.detail?.tab) {
+    currentToolbarPanelTab = event.detail.tab;
+  }
+  requestAnimationFrame(() => {
+    syncWosToolbarShortcutActiveState();
+  });
+});
 
 let wosToolbarBootstrapStarted = false;
 let wosToolbarRetryTimer = null;
@@ -777,6 +887,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!requireWosPage(sendResponse, 'DOI Batch Query')) {
       return true;
     }
+    const toolbarShortcutsReady = ensureWosToolbarShortcutsReady();
+    if (toolbarShortcutsReady) {
+      sendResponse({
+        success: true,
+        visible: false,
+        action: 'toolbar-ready',
+        toolbarShortcutsReady: true
+      });
+      return true;
+    }
     sendResponse(openWosDoiQueryPanel(request.preferredTab));
     return true;
   }
@@ -942,6 +1062,13 @@ document.addEventListener('keydown', (event) => {
 });
 
 if (isWosPage()) {
+  chrome.storage.local.get(['easyscholarEnabled', 'wosQueryEnabled'], result => {
+    isEasyScholarEnabledForToolbar = Boolean(result.easyscholarEnabled);
+    isWosQueryEnabledForToolbar = Boolean(result.wosQueryEnabled);
+    bootstrapWosToolbarShortcuts();
+    ensureWosToolbarShortcuts();
+  });
+
   bootstrapWosToolbarShortcuts();
 }
 
@@ -976,8 +1103,20 @@ if (isWosPage()) {
     if (areaName !== 'local') {
       return;
     }
+    let shouldRefreshToolbar = false;
+    if (changes.easyscholarEnabled) {
+      isEasyScholarEnabledForToolbar = Boolean(changes.easyscholarEnabled.newValue);
+      shouldRefreshToolbar = true;
+    }
+    if (changes.wosQueryEnabled) {
+      isWosQueryEnabledForToolbar = Boolean(changes.wosQueryEnabled.newValue);
+      shouldRefreshToolbar = true;
+    }
     if (changes.wosAideProjectName) {
       notifyEnlightenkeyProject(changes.wosAideProjectName.newValue || null);
+    }
+    if (shouldRefreshToolbar) {
+      ensureWosToolbarShortcuts();
     }
   });
 
