@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>GEWU AIDE</title>
+    <title>WOS Aide</title>
     <link rel="stylesheet" href="popup.css" />
     <link rel="stylesheet" href="all.min.css" />
 </head>
@@ -50,17 +50,15 @@
         <div class="panel-section" id="openaiModelSettingsSection">
           <div class="panel-subtitle">Chat Model</div>
           <div class="field-row">
-            <select id="openaiChatModelSelect">
-              <option value="gpt-4o-mini">gpt-4o-mini</option>
-              <option value="gpt-4.1-nano">gpt-4.1-nano</option>
-              <option value="gpt-5-nano">gpt-5-nano</option>
-              <option value="__custom__">Custom</option>
+            <input id="openaiChatModelInput" type="text" placeholder="gpt-4o-mini" autocomplete="off" />
+          </div>
+          <div class="field-row" id="openaiModelSelectRow" style="display:none;">
+            <select id="openaiModelSelect">
+              <option value="">Select a GPT model</option>
             </select>
           </div>
-          <div class="field-row" id="openaiChatModelCustomRow" style="display:none;">
-            <input id="openaiChatModelCustomInput" type="text" placeholder="custom model id" autocomplete="off" />
-          </div>
           <div class="panel-actions">
+            <button id="openaiLoadModelsBtn" class="button button--ghost">Load Models</button>
             <button id="openaiChatModelTestBtn" class="button button--ghost">Test</button>
           </div>
           <div id="openaiChatModelHint" class="helper">Applies to all chat requests.</div>
@@ -72,6 +70,14 @@
           </div>
           <div class="field-row">
             <input id="lmStudioModelInput" type="text" placeholder="LM Studio model id" autocomplete="off" />
+          </div>
+          <div class="field-row" id="lmStudioModelSelectRow" style="display:none;">
+            <select id="lmStudioModelSelect">
+              <option value="">Select a loaded model</option>
+            </select>
+          </div>
+          <div class="panel-actions">
+            <button id="lmStudioAutofillBtn" class="button button--ghost">Load Models</button>
           </div>
           <div class="field-row">
             <input id="lmStudioApiKeyInput" type="password" placeholder="API key (optional)" autocomplete="off" />

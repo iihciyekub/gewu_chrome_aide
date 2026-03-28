@@ -68,6 +68,46 @@ import './popup.css';
     });
   };
 
+  const sendMessageToTabWithBootstrap = (tabId, message, onComplete) => {
+    const send = () => {
+      chrome.tabs.sendMessage(tabId, message, response => {
+        if (!chrome.runtime.lastError) {
+          onComplete(null, response);
+          return;
+        }
+
+        const errorMessage = chrome.runtime.lastError.message || '';
+        if (!/Receiving end does not exist/i.test(errorMessage)) {
+          onComplete(new Error(errorMessage));
+          return;
+        }
+
+        chrome.scripting.executeScript(
+          {
+            target: { tabId },
+            files: ['contentScript.js'],
+          },
+          () => {
+            if (chrome.runtime.lastError) {
+              onComplete(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+
+            chrome.tabs.sendMessage(tabId, message, retryResponse => {
+              if (chrome.runtime.lastError) {
+                onComplete(new Error(chrome.runtime.lastError.message));
+                return;
+              }
+              onComplete(null, retryResponse);
+            });
+          }
+        );
+      });
+    };
+
+    send();
+  };
+
   const executeMainWorldScripts = (tabId, files, onComplete) => {
     if (!chrome.scripting || !chrome.scripting.executeScript) {
       onComplete(new Error('chrome.scripting is unavailable'));
@@ -134,6 +174,9 @@ import './popup.css';
     const apiKeySaveBtn = document.getElementById('openaiApiKeySaveBtn');
     const apiKeyClearBtn = document.getElementById('openaiApiKeyClearBtn');
     const apiKeyHint = document.getElementById('openaiApiKeyHint');
+    const chatModelInput = document.getElementById('openaiChatModelInput');
+    const openaiModelSelectRow = document.getElementById('openaiModelSelectRow');
+    const openaiModelSelect = document.getElementById('openaiModelSelect');
     const easyScholarApiKeyInput = document.getElementById('easyScholarApiKeyInput');
     const easyScholarApiKeyToggleBtn = document.getElementById('easyScholarApiKeyToggle');
     const easyScholarApiKeySaveBtn = document.getElementById('easyScholarApiKeySaveBtn');
@@ -141,10 +184,8 @@ import './popup.css';
     const easyScholarApiKeyClearBtn = document.getElementById('easyScholarApiKeyClearBtn');
     const easyScholarWebsiteBtn = document.getElementById('easyScholarWebsiteBtn');
     const easyScholarApiKeyHint = document.getElementById('easyScholarApiKeyHint');
-    const chatModelSelect = document.getElementById('openaiChatModelSelect');
     const chatModelHint = document.getElementById('openaiChatModelHint');
-    const chatModelCustomRow = document.getElementById('openaiChatModelCustomRow');
-    const chatModelCustomInput = document.getElementById('openaiChatModelCustomInput');
+    const openaiLoadModelsBtn = document.getElementById('openaiLoadModelsBtn');
     const chatModelTestBtn = document.getElementById('openaiChatModelTestBtn');
     const wosQueryProviderSelect = document.getElementById('wosQueryProviderSelect');
     const wosQueryProviderEnabledToggle = document.getElementById('wosQueryProviderEnabledToggle');
@@ -153,6 +194,9 @@ import './popup.css';
     const lmStudioSettingsSection = document.getElementById('lmStudioSettingsSection');
     const lmStudioBaseUrlInput = document.getElementById('lmStudioBaseUrlInput');
     const lmStudioModelInput = document.getElementById('lmStudioModelInput');
+    const lmStudioModelSelectRow = document.getElementById('lmStudioModelSelectRow');
+    const lmStudioModelSelect = document.getElementById('lmStudioModelSelect');
+    const lmStudioAutofillBtn = document.getElementById('lmStudioAutofillBtn');
     const lmStudioApiKeyInput = document.getElementById('lmStudioApiKeyInput');
     const lmStudioApiKeyToggle = document.getElementById('lmStudioApiKeyToggle');
     const lmStudioSaveBtn = document.getElementById('lmStudioSaveBtn');
@@ -171,7 +215,7 @@ import './popup.css';
     if (clearDoiBtn) {
       clearDoiBtn.title = 'Clear DOI List';
       clearDoiBtn.onclick = () => {
-        chrome.storage.local.set({ enlightenkeyDoiList: [] });
+        chrome.storage.local.set({ wosAideDoiList: [] });
       };
     }
 
@@ -198,14 +242,14 @@ import './popup.css';
     clearDoiBtn.style.display = 'none';
 
     // 读取chrome.storage.local中的DOI列表
-    chrome.storage.local.get(['enlightenkeyDoiList'], result => {
-      updateDoiButton(result.enlightenkeyDoiList || []);
+    chrome.storage.local.get(['wosAideDoiList'], result => {
+      updateDoiButton(result.wosAideDoiList || []);
     });
 
     // 监听chrome.storage.onChanged，实时更新DOI列表
     chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName === 'local' && changes.enlightenkeyDoiList) {
-        updateDoiButton(changes.enlightenkeyDoiList.newValue || []);
+      if (areaName === 'local' && changes.wosAideDoiList) {
+        updateDoiButton(changes.wosAideDoiList.newValue || []);
       }
     });
 
@@ -247,9 +291,9 @@ import './popup.css';
         return;
       }
       chrome.scripting.executeScript(
-        {
-          target: { tabId },
-          world: 'MAIN',
+          {
+            target: { tabId },
+            world: 'MAIN',
           func: (storageKey, storageValue, verifiedKey, verifiedValue, eventName) => {
             try {
               localStorage.setItem(storageKey, storageValue);
@@ -257,13 +301,8 @@ import './popup.css';
             } catch (error) {
               // Ignore storage failures in restricted contexts.
             }
-            try {
-              window.easyscholar_api_key = storageValue;
-            } catch (error) {
-              // Ignore assignment failures.
-            }
             document.dispatchEvent(new CustomEvent(eventName, {
-              detail: { apiKey: storageValue, verified: Boolean(verifiedValue) }
+              detail: { verified: Boolean(verifiedValue) }
             }));
           },
           args: [
@@ -619,6 +658,154 @@ import './popup.css';
       });
     };
 
+    const getLmStudioModelsEndpoint = (rawBaseUrl) => {
+      const normalized = (rawBaseUrl || 'http://127.0.0.1:1234/v1').trim();
+      const url = normalized.replace(/\/$/, '');
+      if (/\/v1$/i.test(url)) {
+        return `${url}/models`;
+      }
+      return `${url}/v1/models`;
+    };
+
+    const extractLmStudioModelId = (payload) => {
+      if (!payload) return '';
+      if (typeof payload === 'string') {
+        return payload.trim();
+      }
+
+      const directCandidates = [
+        payload.model,
+        payload.model_name,
+        payload.modelName,
+        payload.name,
+        payload.id
+      ];
+      for (const candidate of directCandidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          return candidate.trim();
+        }
+      }
+
+      const nestedObjects = [
+        payload.data,
+        payload.result,
+        payload.loaded,
+        payload.current,
+        payload.current_model,
+        payload.currentModel
+      ];
+      for (const value of nestedObjects) {
+        if (!value) continue;
+        const nested = extractLmStudioModelId(value);
+        if (nested) {
+          return nested;
+        }
+      }
+
+      if (Array.isArray(payload)) {
+        for (const item of payload) {
+          const nested = extractLmStudioModelId(item);
+          if (nested) {
+            return nested;
+          }
+        }
+      }
+
+      return '';
+    };
+
+    const populateLmStudioModelSelect = (models) => {
+      if (!lmStudioModelSelect || !lmStudioModelSelectRow) {
+        return;
+      }
+
+      lmStudioModelSelect.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = models.length ? 'Select a loaded model' : 'No models found';
+      lmStudioModelSelect.appendChild(placeholder);
+
+      const currentValue = (lmStudioModelInput?.value || '').trim();
+      models.forEach((modelId) => {
+        const option = document.createElement('option');
+        option.value = modelId;
+        option.textContent = modelId;
+        if (currentValue && currentValue === modelId) {
+          option.selected = true;
+        }
+        lmStudioModelSelect.appendChild(option);
+      });
+
+      lmStudioModelSelectRow.style.display = models.length ? 'flex' : 'none';
+    };
+
+    const fetchLmStudioModels = async () => {
+      const baseUrl = ((lmStudioBaseUrlInput?.value || '').trim() || 'http://127.0.0.1:1234/v1');
+      const apiKey = (lmStudioApiKeyInput?.value || '').trim();
+      const endpoint = getLmStudioModelsEndpoint(baseUrl);
+
+      updateLmStudioHint('Fetching LM Studio model list...', 'status--info');
+      setStatus(sidDisplay, 'Fetching LM Studio model list...', 'status--info');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const headers = {};
+        if (apiKey) {
+          headers.Authorization = `Bearer ${apiKey}`;
+        }
+
+        const response = await fetch(endpoint, {
+          method: 'GET',
+          headers,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          updateLmStudioHint('Failed to load LM Studio model list.', 'status--error');
+          setStatus(sidDisplay, `LM Studio model list failed: ${response.status}`, 'status--error');
+          console.error('LM Studio model list failed:', errorText);
+          return [];
+        }
+
+        const payload = await response.json();
+        const rawModels = Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload)
+            ? payload
+            : Array.isArray(payload?.models)
+              ? payload.models
+              : [];
+
+        const models = rawModels
+          .map((item) => extractLmStudioModelId(item))
+          .filter(Boolean);
+
+        if (!models.length) {
+          populateLmStudioModelSelect([]);
+          updateLmStudioHint('LM Studio responded, but no models were found.', 'status--error');
+          setStatus(sidDisplay, 'No LM Studio models found', 'status--error');
+          return [];
+        }
+
+        populateLmStudioModelSelect(models);
+        updateLmStudioHint(`Loaded ${models.length} LM Studio model${models.length > 1 ? 's' : ''}.`, 'status--success');
+        setStatus(sidDisplay, `LM Studio models loaded: ${models.length}`, 'status--success');
+        return models;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        const message = error.name === 'AbortError'
+          ? 'LM Studio model list timed out.'
+          : 'Failed to fetch the LM Studio model list.';
+        updateLmStudioHint(message, 'status--error');
+        setStatus(sidDisplay, message, 'status--error');
+        return [];
+      }
+    };
+
     const testLmStudioSettings = async () => {
       const baseUrl = ((lmStudioBaseUrlInput?.value || '').trim() || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
       const model = (lmStudioModelInput?.value || '').trim();
@@ -677,11 +864,15 @@ import './popup.css';
     };
 
     const saveChatModel = (model) => {
-      chrome.storage.local.set({ [CHAT_MODEL_STORAGE_KEY]: model }, () => {
+      const trimmedModel = (model || '').trim();
+      chrome.storage.local.set({ [CHAT_MODEL_STORAGE_KEY]: trimmedModel }, () => {
         if (chrome.runtime.lastError) {
           updateChatModelHint('Failed to save model.', 'status--error');
           setStatus(sidDisplay, 'Failed to save model', 'status--error');
           return;
+        }
+        if (chatModelInput) {
+          chatModelInput.value = trimmedModel;
         }
         setProviderVerifiedState('openai', false);
         updateChatModelHint('Model saved. Test again to enable WOS Query.', 'status--info');
@@ -690,46 +881,132 @@ import './popup.css';
     };
 
     const getSelectedModel = () => {
-      if (!chatModelSelect) return 'gpt-4o-mini';
-      if (chatModelSelect.value !== '__custom__') {
-        return chatModelSelect.value;
-      }
-      return (chatModelCustomInput?.value || '').trim();
+      return (chatModelInput?.value || '').trim() || 'gpt-4o-mini';
     };
 
-    const updateCustomVisibility = () => {
-      if (!chatModelCustomRow || !chatModelSelect) return;
-      const show = chatModelSelect.value === '__custom__';
-      chatModelCustomRow.style.display = show ? 'flex' : 'none';
-      if (!show) {
-        updateChatModelHint('Applies to all chat requests.', 'status--muted');
+    const populateOpenAIModelSelect = (models) => {
+      if (!openaiModelSelect || !openaiModelSelectRow) {
+        return;
       }
-    };
 
-    if (chatModelSelect) {
-      chrome.storage.local.get([CHAT_MODEL_STORAGE_KEY], result => {
-        const storedModel = result[CHAT_MODEL_STORAGE_KEY] || 'gpt-4o-mini';
-        const knownModels = ['gpt-4o-mini', 'gpt-5-nano'];
-        if (knownModels.includes(storedModel)) {
-          chatModelSelect.value = storedModel;
-        } else {
-          chatModelSelect.value = '__custom__';
-          if (chatModelCustomInput) {
-            chatModelCustomInput.value = storedModel;
-          }
+      openaiModelSelect.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = models.length ? 'Select a GPT model' : 'No GPT models found';
+      openaiModelSelect.appendChild(placeholder);
+
+      const currentValue = getSelectedModel();
+      models.forEach((modelId) => {
+        const option = document.createElement('option');
+        option.value = modelId;
+        option.textContent = modelId;
+        if (currentValue && currentValue === modelId) {
+          option.selected = true;
         }
-        updateCustomVisibility();
+        openaiModelSelect.appendChild(option);
+      });
+
+      openaiModelSelectRow.style.display = models.length ? 'flex' : 'none';
+    };
+
+    const fetchOpenAIModels = async () => {
+      const apiKey = (apiKeyInput?.value || '').trim();
+      if (!apiKey) {
+        updateChatModelHint('Enter and save an OpenAI API key first.', 'status--error');
+        setStatus(sidDisplay, 'OpenAI API key missing', 'status--error');
+        return [];
+      }
+
+      updateChatModelHint('Fetching OpenAI GPT model list...', 'status--info');
+      setStatus(sidDisplay, 'Fetching OpenAI models...', 'status--info');
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const response = await fetch('https://api.openai.com/v1/models', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`
+          },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          updateChatModelHint('Failed to load OpenAI models.', 'status--error');
+          setStatus(sidDisplay, `OpenAI models failed: ${response.status}`, 'status--error');
+          console.error('OpenAI models failed:', errorText);
+          return [];
+        }
+
+        const payload = await response.json();
+        const models = (Array.isArray(payload?.data) ? payload.data : [])
+          .map((item) => typeof item?.id === 'string' ? item.id.trim() : '')
+          .filter((id) => id && /^gpt/i.test(id))
+          .sort((a, b) => a.localeCompare(b));
+
+        populateOpenAIModelSelect(models);
+        if (!models.length) {
+          updateChatModelHint('No GPT models were returned by OpenAI.', 'status--error');
+          setStatus(sidDisplay, 'No GPT models found', 'status--error');
+          return [];
+        }
+
+        updateChatModelHint(`Loaded ${models.length} GPT model${models.length > 1 ? 's' : ''}.`, 'status--success');
+        setStatus(sidDisplay, `OpenAI GPT models loaded: ${models.length}`, 'status--success');
+        return models;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        const message = error.name === 'AbortError'
+          ? 'OpenAI model list timed out.'
+          : 'Failed to fetch OpenAI models.';
+        updateChatModelHint(message, 'status--error');
+        setStatus(sidDisplay, message, 'status--error');
+        return [];
+      }
+    };
+
+    if (chatModelInput) {
+      chrome.storage.local.get([CHAT_MODEL_STORAGE_KEY], result => {
+        chatModelInput.value = result[CHAT_MODEL_STORAGE_KEY] || 'gpt-4o-mini';
         updateChatModelHint('Loaded from extension storage.', 'status--muted');
       });
 
-      chatModelSelect.addEventListener('change', () => {
-        updateCustomVisibility();
+      chatModelInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          const model = getSelectedModel();
+          if (!model) {
+            updateChatModelHint('Enter an OpenAI model id.', 'status--error');
+            return;
+          }
+          saveChatModel(model);
+        }
+      });
+
+      chatModelInput.addEventListener('blur', () => {
         const model = getSelectedModel();
         if (!model) {
-          updateChatModelHint('Enter a custom model id.', 'status--error');
           return;
         }
         saveChatModel(model);
+      });
+    }
+
+    if (openaiModelSelect) {
+      openaiModelSelect.addEventListener('change', () => {
+        const model = (openaiModelSelect.value || '').trim();
+        if (!model) {
+          return;
+        }
+        if (chatModelInput) {
+          chatModelInput.value = model;
+        }
+        saveChatModel(model);
+        updateChatModelHint(`Selected OpenAI model: ${model}`, 'status--success');
+        setStatus(sidDisplay, `OpenAI model selected: ${model}`, 'status--success');
       });
     }
 
@@ -792,6 +1069,21 @@ import './popup.css';
       });
     }
 
+    if (lmStudioModelSelect) {
+      lmStudioModelSelect.addEventListener('change', () => {
+        const model = (lmStudioModelSelect.value || '').trim();
+        if (!model) {
+          return;
+        }
+        if (lmStudioModelInput) {
+          lmStudioModelInput.value = model;
+        }
+        saveLmStudioSettings();
+        updateLmStudioHint(`Selected LM Studio model: ${model}`, 'status--success');
+        setStatus(sidDisplay, `LM Studio model selected: ${model}`, 'status--success');
+      });
+    }
+
     if (lmStudioApiKeyInput) {
       lmStudioApiKeyInput.addEventListener('blur', saveLmStudioSettings);
       lmStudioApiKeyInput.addEventListener('keydown', (event) => {
@@ -799,26 +1091,6 @@ import './popup.css';
           event.preventDefault();
           saveLmStudioSettings();
         }
-      });
-    }
-
-    if (chatModelCustomInput) {
-      chatModelCustomInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          const model = getSelectedModel();
-          if (!model) {
-            updateChatModelHint('Enter a custom model id.', 'status--error');
-            return;
-          }
-          saveChatModel(model);
-        }
-      });
-      chatModelCustomInput.addEventListener('blur', () => {
-        if (chatModelSelect?.value !== '__custom__') return;
-        const model = getSelectedModel();
-        if (!model) return;
-        saveChatModel(model);
       });
     }
 
@@ -878,6 +1150,12 @@ import './popup.css';
             setStatus(sidDisplay, message, 'status--error');
           }
         });
+      });
+    }
+
+    if (openaiLoadModelsBtn) {
+      openaiLoadModelsBtn.addEventListener('click', async () => {
+        await fetchOpenAIModels();
       });
     }
 
@@ -962,6 +1240,12 @@ import './popup.css';
       });
     }
 
+    if (lmStudioAutofillBtn) {
+      lmStudioAutofillBtn.addEventListener('click', async () => {
+        await fetchLmStudioModels();
+      });
+    }
+
     if (lmStudioTestBtn) {
       lmStudioTestBtn.addEventListener('click', async () => {
         await testLmStudioSettings();
@@ -978,12 +1262,12 @@ import './popup.css';
           setStatus(sidDisplay, 'No active tab detected', 'status--error');
           return;
         }
-        chrome.tabs.sendMessage(
+        sendMessageToTabWithBootstrap(
           tab.id,
           { type: isWosDoiQueryEnabled ? 'OPEN_WOS_DOI_QUERY' : 'CLOSE_WOS_DOI_QUERY' },
-          response => {
-            if (chrome.runtime.lastError) {
-              setStatus(sidDisplay, 'Error: ' + chrome.runtime.lastError.message, 'status--error');
+          (error, response) => {
+            if (error) {
+              setStatus(sidDisplay, 'Error: ' + error.message, 'status--error');
               return;
             }
             if (response && response.success) {
@@ -993,7 +1277,11 @@ import './popup.css';
                 'status--success'
               );
             } else {
-              setStatus(sidDisplay, 'Failed to toggle DOI batch query', 'status--error');
+              setStatus(
+                sidDisplay,
+                response?.error || 'Failed to toggle DOI batch query',
+                'status--error'
+              );
             }
           }
         );
@@ -1009,12 +1297,12 @@ import './popup.css';
           setStatus(sidDisplay, 'No active tab detected', 'status--error');
           return;
         }
-        chrome.tabs.sendMessage(
+        sendMessageToTabWithBootstrap(
           tab.id,
           { type: isDoiPdfDownloadEnabled ? 'OPEN_DOI_PDF_DOWNLOAD' : 'CLOSE_DOI_PDF_DOWNLOAD' },
-          response => {
-            if (chrome.runtime.lastError) {
-              setStatus(sidDisplay, 'Error: ' + chrome.runtime.lastError.message, 'status--error');
+          (error, response) => {
+            if (error) {
+              setStatus(sidDisplay, 'Error: ' + error.message, 'status--error');
               return;
             }
             if (response && response.success) {
@@ -1024,7 +1312,11 @@ import './popup.css';
                 'status--success'
               );
             } else {
-              setStatus(sidDisplay, 'Failed to toggle DOI PDF download', 'status--error');
+              setStatus(
+                sidDisplay,
+                response?.error || 'Failed to toggle DOI PDF download',
+                'status--error'
+              );
             }
           }
         );

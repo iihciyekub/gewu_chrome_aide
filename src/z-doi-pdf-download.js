@@ -53,7 +53,7 @@ const SO_temp = {
     let downloadDirName = '';
 
     const openProjectHandleStore = async () => new Promise((resolve, reject) => {
-        const request = indexedDB.open('gewuaide-toolkit', 1);
+        const request = indexedDB.open('wosaide-toolkit', 1);
         request.onupgradeneeded = () => {
             request.result.createObjectStore('projectHandles');
         };
@@ -104,14 +104,14 @@ const SO_temp = {
         if (!window.showDirectoryPicker) {
             throw new Error('Directory picker is not supported');
         }
-        const handle = await window.showDirectoryPicker({ id: 'enlightenkey-project', mode: 'readwrite' });
+        const handle = await window.showDirectoryPicker({ id: 'wosAide-project', mode: 'readwrite' });
         const granted = await ensureDirectoryPermission(handle);
         if (!granted) {
             throw new Error('Write permission not granted');
         }
         downloadDirHandle = handle;
         downloadDirName = handle.name || '';
-        window.enlightenkeyDirectoryHandle = handle;
+        window.wosAideDirectoryHandle = handle;
         await setStoredProjectHandle(handle);
         return handle;
     };
@@ -590,7 +590,7 @@ const SO_temp = {
                     downloadDirHandle = dirHandle;
                     downloadDirName = dirHandle.name || '';
                     selectDownloadDirBtn.textContent = downloadDirName ? `Download Folder: ${downloadDirName}` : "Choose Download Folder";
-                    window.enlightenkeyDirectoryHandle = dirHandle;
+                    window.wosAideDirectoryHandle = dirHandle;
                 }
             }
             if (dirHandle) {
@@ -661,7 +661,7 @@ const SO_temp = {
                 downloadDirHandle = dirHandle;
                 downloadDirName = dirHandle.name || '';
                 selectDownloadDirBtn.textContent = downloadDirName ? `Download Folder: ${downloadDirName}` : "Choose Download Folder";
-                window.enlightenkeyDirectoryHandle = dirHandle;
+                window.wosAideDirectoryHandle = dirHandle;
             }
         }
         if (dirHandle) {
@@ -766,7 +766,7 @@ const SO_temp = {
         downloadDirHandle = handle;
         downloadDirName = handle.name || '';
         selectDownloadDirBtn.textContent = downloadDirName ? `Download Folder: ${downloadDirName}` : "Choose Download Folder";
-        window.enlightenkeyDirectoryHandle = handle;
+        window.wosAideDirectoryHandle = handle;
     });
 
     // 拖动和销毁

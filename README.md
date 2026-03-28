@@ -1,6 +1,6 @@
-# <img src="public/icons/icon_48.png" width="45" align="left"> GEWU Aide
+# <img src="public/icons/icon_48.png" width="45" align="left"> WOS Aide
 
-GEWU Aide is a Chrome extension for Web of Science users. It helps streamline common GEWU workflows on WoS, including query building, batch searching, metadata export, and PDF download support.
+WOS Aide is a Chrome extension for Web of Science users. It helps streamline common WOS workflows on WoS, including query building, batch searching, metadata export, and PDF download support.
 
 ## What It Does
 
@@ -61,6 +61,10 @@ The packaged extension files are generated in the [`build`](/Users/iipro/iiworks
 
 ## Notes
 
-- This extension is designed for GEWU-related research workflows on Web of Science.
+- This extension is designed for WOS-related research workflows on Web of Science.
 - API keys are stored locally in Chrome extension storage.
 - Some features require the current page to be a valid Web of Science results page.
+- See [`PRIVACY.md`](/Users/iipro/iiworkspace/gewu_chrome_aide/PRIVACY.md) for the current privacy policy draft.
+- See [`STORE_LISTING.md`](/Users/iipro/iiworkspace/gewu_chrome_aide/STORE_LISTING.md) for Web Store submission notes and permission explanations.
+- See [`STORE_LISTING_BILINGUAL.md`](/Users/iipro/iiworkspace/gewu_chrome_aide/STORE_LISTING_BILINGUAL.md) for copy-ready English and Chinese store listing text.
+- See [`CWS_DISCLOSURE_CHECKLIST.md`](/Users/iipro/iiworkspace/gewu_chrome_aide/CWS_DISCLOSURE_CHECKLIST.md) for a suggested Chrome Web Store privacy disclosure checklist.

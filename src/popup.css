@@ -38,19 +38,19 @@ textarea {
 
 body {
     width: 320px;
-    height: 600px;
+    min-height: 0;
     background: radial-gradient(circle at top left, #fbf7ee 0%, #f4f0e6 55%, #ede6d6 100%);
 }
 
 .app {
-    height: 100%;
+    min-height: 0;
     display: flex;
     align-items: flex-start;
     justify-content: flex-start;
     flex-direction: column;
     padding: 12px;
     gap: 10px;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .header {
@@ -202,18 +202,6 @@ body {
     flex-direction: column;
     gap: 12px;
     padding: 0 12px 12px 12px;
-}
-
-#openaiSettingsBody {
-    max-height: 300px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-}
-
-#easyScholarSettingsBody {
-    max-height: 220px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
 }
 
 .panel-body.is-collapsed {

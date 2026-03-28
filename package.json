@@ -1,7 +1,7 @@
 {
-  "name": "gewu_aide",
+  "name": "wos_aide",
   "version": "0.1.0",
-  "description": "GEWU aide Chrome Extension",
+  "description": "WOS Aide Chrome Extension",
   "private": true,
   "scripts": {
     "watch": "node ./node_modules/webpack/bin/webpack.js --mode=development --watch --config config/webpack.config.js",

@@ -1,11 +1,19 @@
+const isWosPage = () => /(^|\.)webofscience\.com$/i.test(window.location.hostname || '');
+const isChatGptPage = () => /(^|\.)chatgpt\.com$/i.test(window.location.hostname || '');
+const isSameWindowMessage = (event) => event?.source === window;
+const allowStorageBridge = () => isWosPage() || isChatGptPage();
+
 // 监听面板请求DOI列表
 window.addEventListener('message', (event) => {
-  if (event?.data?.type === 'ENLIGHTENKEY_DOI_LIST_REQUEST') {
-    chrome.storage.local.get(['enlightenkeyDoiList'], result => {
+  if (!isSameWindowMessage(event) || !isWosPage()) {
+    return;
+  }
+  if (event?.data?.type === 'WOS_AIDE_DOI_LIST_REQUEST') {
+    chrome.storage.local.get(['wosAideDoiList'], result => {
       // 用 window.top.postMessage 保证面板能收到
       window.top.postMessage({
-        type: 'ENLIGHTENKEY_DOI_LIST_RESPONSE',
-        doiList: result.enlightenkeyDoiList || []
+        type: 'WOS_AIDE_DOI_LIST_RESPONSE',
+        doiList: result.wosAideDoiList || []
       }, '*');
     });
   }
@@ -13,7 +21,10 @@ window.addEventListener('message', (event) => {
 
 // Quickload prompt storage bridge (for pages where localStorage is blocked)
 window.addEventListener('message', (event) => {
-  if (event?.data?.type !== 'GEWU_QUICKLOAD_STORAGE') {
+  if (!isSameWindowMessage(event) || !allowStorageBridge()) {
+    return;
+  }
+  if (event?.data?.type !== 'WOS_AIDE_QUICKLOAD_STORAGE') {
     return;
   }
   const { action, key, value, requestId } = event.data || {};
@@ -23,7 +34,7 @@ window.addEventListener('message', (event) => {
   if (action === 'get') {
     chrome.storage.local.get([key], result => {
       window.postMessage({
-        type: 'GEWU_QUICKLOAD_STORAGE_RESPONSE',
+        type: 'WOS_AIDE_QUICKLOAD_STORAGE_RESPONSE',
         requestId,
         value: result[key] || null
       }, '*');
@@ -33,7 +44,7 @@ window.addEventListener('message', (event) => {
   if (action === 'set') {
     chrome.storage.local.set({ [key]: value }, () => {
       window.postMessage({
-        type: 'GEWU_QUICKLOAD_STORAGE_RESPONSE',
+        type: 'WOS_AIDE_QUICKLOAD_STORAGE_RESPONSE',
         requestId,
         value: true
       }, '*');
@@ -42,9 +53,12 @@ window.addEventListener('message', (event) => {
 });
 // 监听网页window.postMessage的DOI列表消息，并转发给插件
 window.addEventListener('message', (event) => {
-  if (event?.data?.type === 'ENLIGHTENKEY_DOI_LIST' && Array.isArray(event.data.doiList)) {
+  if (!isSameWindowMessage(event) || !isWosPage()) {
+    return;
+  }
+  if (event?.data?.type === 'WOS_AIDE_DOI_LIST' && Array.isArray(event.data.doiList)) {
     // 存储到chrome.storage.local，供popup读取
-    chrome.storage.local.set({ enlightenkeyDoiList: event.data.doiList });
+    chrome.storage.local.set({ wosAideDoiList: event.data.doiList });
   }
 });
 'use strict';
@@ -153,14 +167,10 @@ let bridgePromise = null;
 
 const CHAT_API_KEY_STORAGE_KEY = 'wosOpenaiApiKey';
 const CHAT_MODEL_STORAGE_KEY = 'wosOpenaiChatModel';
-const CHAT_API_KEY_REQUEST_EVENT = '__ENLIGHTENKEY_CHAT_API_KEY_REQUEST__';
-const CHAT_API_KEY_RESPONSE_EVENT = '__ENLIGHTENKEY_CHAT_API_KEY_RESPONSE__';
-const CHAT_API_KEY_UPDATE_EVENT = '__ENLIGHTENKEY_CHAT_API_KEY_UPDATE__';
-const CHAT_API_KEY_SYNC_EVENT = '__ENLIGHTENKEY_CHAT_API_KEY_SYNC__';
-const CHAT_MODEL_REQUEST_EVENT = '__ENLIGHTENKEY_CHAT_MODEL_REQUEST__';
-const CHAT_MODEL_RESPONSE_EVENT = '__ENLIGHTENKEY_CHAT_MODEL_RESPONSE__';
-const CHAT_MODEL_UPDATE_EVENT = '__ENLIGHTENKEY_CHAT_MODEL_UPDATE__';
-const CHAT_MODEL_SYNC_EVENT = '__ENLIGHTENKEY_CHAT_MODEL_SYNC__';
+const GENERATE_WOS_QUERY_REQUEST_EVENT = '__WOS_AIDE_GENERATE_WOS_QUERY_REQUEST__';
+const GENERATE_WOS_QUERY_RESPONSE_EVENT = '__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__';
+const FETCH_EASYSCHOLAR_RANK_REQUEST_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_REQUEST__';
+const FETCH_EASYSCHOLAR_RANK_RESPONSE_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_RESPONSE__';
 
 /**
  * 确保 module-bridge 已加载
@@ -197,52 +207,41 @@ const ensureBridge = () => {
   return bridgePromise;
 };
 
-const sendChatApiKeyResponse = (requestId, apiKey) => {
-  document.dispatchEvent(new CustomEvent(CHAT_API_KEY_RESPONSE_EVENT, {
-    detail: { requestId, apiKey }
-  }));
-};
-
-const sendChatModelResponse = (requestId, model) => {
-  document.dispatchEvent(new CustomEvent(CHAT_MODEL_RESPONSE_EVENT, {
-    detail: { requestId, model }
-  }));
-};
-
-const notifyChatApiKeyUpdate = (apiKey) => {
-  document.dispatchEvent(new CustomEvent(CHAT_API_KEY_SYNC_EVENT, {
-    detail: { apiKey }
-  }));
-};
-
-const notifyChatModelUpdate = (model) => {
-  document.dispatchEvent(new CustomEvent(CHAT_MODEL_SYNC_EVENT, {
-    detail: { model }
-  }));
-};
-
-document.addEventListener(CHAT_API_KEY_REQUEST_EVENT, (event) => {
+document.addEventListener(GENERATE_WOS_QUERY_REQUEST_EVENT, (event) => {
   const requestId = event?.detail?.requestId;
-  chrome.storage.local.get([CHAT_API_KEY_STORAGE_KEY], result => {
-    sendChatApiKeyResponse(requestId, result[CHAT_API_KEY_STORAGE_KEY] || '');
-  });
+  const text = event?.detail?.text || '';
+  const provider = event?.detail?.provider || '';
+  chrome.runtime.sendMessage(
+    { type: 'GENERATE_WOS_QUERY', requestId, text, provider },
+    (response) => {
+      document.dispatchEvent(new CustomEvent(GENERATE_WOS_QUERY_RESPONSE_EVENT, {
+        detail: {
+          requestId,
+          success: Boolean(response?.success),
+          rowText: response?.rowText || '',
+          error: response?.error || ''
+        }
+      }));
+    }
+  );
 });
 
-document.addEventListener(CHAT_MODEL_REQUEST_EVENT, (event) => {
+document.addEventListener(FETCH_EASYSCHOLAR_RANK_REQUEST_EVENT, (event) => {
   const requestId = event?.detail?.requestId;
-  chrome.storage.local.get([CHAT_MODEL_STORAGE_KEY], result => {
-    sendChatModelResponse(requestId, result[CHAT_MODEL_STORAGE_KEY] || 'gpt-4o-mini');
-  });
-});
-
-document.addEventListener(CHAT_API_KEY_UPDATE_EVENT, (event) => {
-  const apiKey = event?.detail?.apiKey || '';
-  chrome.storage.local.set({ [CHAT_API_KEY_STORAGE_KEY]: apiKey });
-});
-
-document.addEventListener(CHAT_MODEL_UPDATE_EVENT, (event) => {
-  const model = event?.detail?.model || 'gpt-4o-mini';
-  chrome.storage.local.set({ [CHAT_MODEL_STORAGE_KEY]: model });
+  const publicationName = event?.detail?.publicationName || '';
+  chrome.runtime.sendMessage(
+    { type: 'FETCH_EASYSCHOLAR_RANK', requestId, publicationName },
+    (response) => {
+      document.dispatchEvent(new CustomEvent(FETCH_EASYSCHOLAR_RANK_RESPONSE_EVENT, {
+        detail: {
+          requestId,
+          success: Boolean(response?.success),
+          result: response?.result || null,
+          error: response?.error || ''
+        }
+      }));
+    }
+  );
 });
 /**
  * 设置模块可见性
@@ -260,6 +259,17 @@ const setModuleVisibility = (moduleId, visible) => {
       detail: { visible }
     }));
   });
+};
+
+const requireWosPage = (sendResponse, featureName) => {
+  if (isWosPage()) {
+    return true;
+  }
+  sendResponse({
+    success: false,
+    error: `${featureName} is available only on Web of Science pages.`
+  });
+  return false;
 };
 
 /**
@@ -323,6 +333,35 @@ const getModuleState = (moduleId) => {
   return { exists: true, visible: !isHidden };
 };
 
+const toggleWosDoiQueryPanel = (preferredTab) => {
+  const element = document.getElementById(MODULES.wosDoiQuery.elementId);
+  const switchTab = () => {
+    if (!preferredTab) {
+      return;
+    }
+    document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
+      detail: { tab: preferredTab }
+    }));
+  };
+
+  if (element) {
+    const nextVisible = element.style.display === 'none';
+    element.style.display = nextVisible ? 'flex' : 'none';
+    setModuleVisibility('wosDoiQuery', nextVisible);
+    if (nextVisible) {
+      switchTab();
+    }
+    return { success: true, visible: nextVisible, action: 'toggled' };
+  }
+
+  injectModule('wosDoiQuery');
+  setTimeout(() => {
+    setModuleVisibility('wosDoiQuery', true);
+    switchTab();
+  }, 100);
+  return { success: true, visible: true, action: 'injected' };
+};
+
 // ========== 消息监听 ==========
 
 // Listen for message
@@ -335,6 +374,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'OPEN_EASYSCHOLAR') {
+    if (!requireWosPage(sendResponse, 'EasyScholar')) {
+      return true;
+    }
     const element = document.getElementById(MODULES.wosDoiQuery.elementId);
     const switchToJournalTab = () => {
       document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
@@ -380,6 +422,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'TOGGLE_EASYSCHOLAR_PANEL') {
+    if (!requireWosPage(sendResponse, 'EasyScholar')) {
+      return true;
+    }
     const element = document.getElementById(MODULES.wosDoiQuery.elementId);
     if (element) {
       const isVisible = element.style.display !== 'none';
@@ -416,29 +461,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'OPEN_WOS_DOI_QUERY') {
-    const switchTab = () => {
-      if (!request.preferredTab) {
-        return;
-      }
-      document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
-        detail: { tab: request.preferredTab }
-      }));
-    };
-
+    if (!requireWosPage(sendResponse, 'DOI Batch Query')) {
+      return true;
+    }
     const element = document.getElementById(MODULES.wosDoiQuery.elementId);
     if (element) {
       element.style.display = 'flex';
       setModuleVisibility('wosDoiQuery', true);
-      switchTab();
+      if (request.preferredTab) {
+        document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
+          detail: { tab: request.preferredTab }
+        }));
+      }
       sendResponse({ success: true, action: 'shown' });
       return true;
     }
 
-    // 注入模块，然后等待一个短暂的时间再发送可见性事件
     injectModule('wosDoiQuery');
     setTimeout(() => {
       setModuleVisibility('wosDoiQuery', true);
-      switchTab();
+      if (request.preferredTab) {
+        document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
+          detail: { tab: request.preferredTab }
+        }));
+      }
     }, 100);
     sendResponse({ success: true, action: 'injected' });
     return true;
@@ -509,6 +555,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'OPEN_OPENAI_CHAT') {
+    if (!requireWosPage(sendResponse, 'OpenAI Chat')) {
+      return true;
+    }
     const element = document.getElementById(MODULES.openaiChat.elementId);
     if (element) {
       element.style.display = 'flex';
@@ -538,9 +587,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.type === 'GET_ENLIGHTENKEY_PROJECT') {
+  if (request.type === 'GET_WOS_AIDE_PROJECT') {
     const listener = (event) => {
-      document.removeEventListener('__ENLIGHTENKEY_PROJECT_RESPONSE__', listener);
+      document.removeEventListener('__WOS_AIDE_PROJECT_RESPONSE__', listener);
       if (event.detail.success) {
         sendResponse({ success: true, projectName: event.detail.projectName });
       } else {
@@ -548,14 +597,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     };
 
-    document.addEventListener('__ENLIGHTENKEY_PROJECT_RESPONSE__', listener);
-    document.dispatchEvent(new CustomEvent('__GET_ENLIGHTENKEY_PROJECT__'));
+    document.addEventListener('__WOS_AIDE_PROJECT_RESPONSE__', listener);
+    document.dispatchEvent(new CustomEvent('__GET_WOS_AIDE_PROJECT__'));
     return true;
   }
 
-  if (request.type === 'PICK_ENLIGHTENKEY_DIRECTORY') {
+  if (request.type === 'PICK_WOS_AIDE_DIRECTORY') {
     const listener = (event) => {
-      document.removeEventListener('__ENLIGHTENKEY_PICK_DIR_RESPONSE__', listener);
+      document.removeEventListener('__WOS_AIDE_PICK_DIR_RESPONSE__', listener);
       if (event.detail.success) {
         sendResponse({ success: true });
       } else {
@@ -563,8 +612,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     };
 
-    document.addEventListener('__ENLIGHTENKEY_PICK_DIR_RESPONSE__', listener);
-    document.dispatchEvent(new CustomEvent('__ENLIGHTENKEY_PICK_DIR__'));
+    document.addEventListener('__WOS_AIDE_PICK_DIR_RESPONSE__', listener);
+    document.dispatchEvent(new CustomEvent('__WOS_AIDE_PICK_DIR__'));
     return true;
   }
 
@@ -576,7 +625,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // ========== 初始化：根据存储的状态自动加载模块 ==========
 
-const isWosPage = () => /(^|\.)webofscience\.com$/i.test(window.location.hostname || '');
+const isEditableTarget = (target) => {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+};
+
+document.addEventListener('keydown', (event) => {
+  if (!isWosPage()) {
+    return;
+  }
+  if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) {
+    return;
+  }
+  if (event.key !== '`' && event.code !== 'Backquote') {
+    return;
+  }
+  if (isEditableTarget(event.target)) {
+    return;
+  }
+
+  event.preventDefault();
+  toggleWosDoiQueryPanel();
+});
 
 if (isWosPage()) {
   injectModule('wosDoiQuery');
@@ -585,19 +657,57 @@ if (isWosPage()) {
   }, 100);
 }
 
-chrome.storage.local.get(['easyscholarEnabled'], result => {
-  if (result.easyscholarEnabled) {
-    setModuleVisibility('easyscholar', true);
-    injectModule('easyscholar');
-  }
-});
+if (isWosPage()) {
+  chrome.storage.local.get(['easyscholarEnabled'], result => {
+    if (result.easyscholarEnabled) {
+      setModuleVisibility('easyscholar', true);
+      injectModule('easyscholar');
+    }
+  });
 
-chrome.storage.local.get(['wosDoiQueryEnabled'], result => {
-  if (result.wosDoiQueryEnabled) {
-    setModuleVisibility('wosDoiQuery', true);
-    injectModule('wosDoiQuery');
-  }
-});
+  chrome.storage.local.get(['wosDoiQueryEnabled'], result => {
+    if (result.wosDoiQueryEnabled) {
+      setModuleVisibility('wosDoiQuery', true);
+      injectModule('wosDoiQuery');
+    }
+  });
+
+  chrome.storage.local.get(['openaiChatEnabled'], result => {
+    if (result.openaiChatEnabled) {
+      setModuleVisibility('openaiChat', true);
+      injectModule('openaiChat');
+    }
+  });
+
+  const notifyEnlightenkeyProject = (projectName) => {
+    document.dispatchEvent(new CustomEvent('__WOS_AIDE_PROJECT_UPDATE__', {
+      detail: { projectName }
+    }));
+  };
+
+  chrome.storage.local.get(['wosAideProjectName'], result => {
+    if (result.wosAideProjectName) {
+      notifyEnlightenkeyProject(result.wosAideProjectName);
+    }
+  });
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') {
+      return;
+    }
+    if (changes.wosAideProjectName) {
+      notifyEnlightenkeyProject(changes.wosAideProjectName.newValue || null);
+    }
+  });
+
+  // Load the external injected script only on WoS-related pages.
+  const script = document.createElement('script');
+  script.src = chrome.runtime.getURL('injected.js');
+  script.onload = function() {
+    this.remove();
+  };
+  (document.head || document.documentElement).appendChild(script);
+}
 
 chrome.storage.local.get(['doiPdfDownloadEnabled'], result => {
   if (result.doiPdfDownloadEnabled) {
@@ -605,60 +715,6 @@ chrome.storage.local.get(['doiPdfDownloadEnabled'], result => {
     injectModule('doiPdfDownload');
   }
 });
-
-chrome.storage.local.get(['openaiChatEnabled'], result => {
-  if (result.openaiChatEnabled) {
-    setModuleVisibility('openaiChat', true);
-    injectModule('openaiChat');
-  }
-});
-
-const notifyEnlightenkeyProject = (projectName) => {
-  document.dispatchEvent(new CustomEvent('__ENLIGHTENKEY_PROJECT_UPDATE__', {
-    detail: { projectName }
-  }));
-};
-
-chrome.storage.local.get(['enlightenkeyProjectName'], result => {
-  if (result.enlightenkeyProjectName) {
-    notifyEnlightenkeyProject(result.enlightenkeyProjectName);
-  }
-});
-
-chrome.storage.local.get([CHAT_API_KEY_STORAGE_KEY], result => {
-  if (result[CHAT_API_KEY_STORAGE_KEY]) {
-    notifyChatApiKeyUpdate(result[CHAT_API_KEY_STORAGE_KEY]);
-  }
-});
-
-chrome.storage.local.get([CHAT_MODEL_STORAGE_KEY], result => {
-  if (result[CHAT_MODEL_STORAGE_KEY]) {
-    notifyChatModelUpdate(result[CHAT_MODEL_STORAGE_KEY]);
-  }
-});
-
-chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== 'local') {
-    return;
-  }
-  if (changes.enlightenkeyProjectName) {
-    notifyEnlightenkeyProject(changes.enlightenkeyProjectName.newValue || null);
-  }
-  if (changes[CHAT_API_KEY_STORAGE_KEY]) {
-    notifyChatApiKeyUpdate(changes[CHAT_API_KEY_STORAGE_KEY].newValue || '');
-  }
-  if (changes[CHAT_MODEL_STORAGE_KEY]) {
-    notifyChatModelUpdate(changes[CHAT_MODEL_STORAGE_KEY].newValue || 'gpt-4o-mini');
-  }
-});
-
-// Load the external injected script to avoid CSP issues
-const script = document.createElement('script');
-script.src = chrome.runtime.getURL('injected.js');
-script.onload = function() {
-  this.remove();
-};
-(document.head || document.documentElement).appendChild(script);
 
 // Inject ChatGPT prompts quickload helper on chatgpt.com
 if (location.hostname === 'chatgpt.com' || location.hostname.endsWith('.chatgpt.com')) {

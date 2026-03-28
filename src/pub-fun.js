@@ -2,7 +2,7 @@
  * 加载 Font Awesome 图标库
  */
 (function () {
-    window.ENLIGHTENKEY_FONT_FAMILY =
+    window.WOS_AIDE_FONT_FAMILY =
         'Arial, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif';
     function resolveExtensionUrl(relativePath) {
         const currentScript = document.currentScript;
@@ -27,7 +27,7 @@
     function loadFontAwesome() {
         // 检查是否已加载（页面已有 Font Awesome 时不重复加载）
         if (
-            document.getElementById('enlightenkey-fontawesome') ||
+            document.getElementById('wosAide-fontawesome') ||
             document.querySelector('link[href*="fontawesome"]') ||
             window.FontAwesome ||
             window.__fortawesome__
@@ -37,7 +37,7 @@
         }
         // 加载 Font Awesome CSS
         const link = document.createElement('link');
-        link.id = 'enlightenkey-fontawesome';
+        link.id = 'wosAide-fontawesome';
         link.rel = 'stylesheet';
         const localHref = resolveExtensionUrl('all.min.css');
         link.href = localHref || 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';

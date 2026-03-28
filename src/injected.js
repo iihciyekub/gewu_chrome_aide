@@ -134,41 +134,41 @@
     return await window.copyFileToClipboard(fileInfo.path);
   };
 
-  // ========== EnlightenKey Project ==========
-  document.addEventListener('__GET_ENLIGHTENKEY_PROJECT__', () => {
+  // ========== WOS Aide Project ==========
+  document.addEventListener('__GET_WOS_AIDE_PROJECT__', () => {
     try {
       const title = document.querySelector('title')?.textContent?.trim() || '';
-      if (title !== 'EnlightenKey') {
-        document.dispatchEvent(new CustomEvent('__ENLIGHTENKEY_PROJECT_RESPONSE__', {
-          detail: { error: 'Not on EnlightenKey page', success: false }
+      if (title !== 'WOS Aide') {
+        document.dispatchEvent(new CustomEvent('__WOS_AIDE_PROJECT_RESPONSE__', {
+          detail: { error: 'Not on WOS Aide page', success: false }
         }));
         return;
       }
       const projectName = document.querySelector('#currentProjectName')?.textContent?.trim()
         || window.currentProjectName
         || null;
-      document.dispatchEvent(new CustomEvent('__ENLIGHTENKEY_PROJECT_RESPONSE__', {
+      document.dispatchEvent(new CustomEvent('__WOS_AIDE_PROJECT_RESPONSE__', {
         detail: { projectName, success: Boolean(projectName) }
       }));
     } catch (error) {
-      document.dispatchEvent(new CustomEvent('__ENLIGHTENKEY_PROJECT_RESPONSE__', {
+      document.dispatchEvent(new CustomEvent('__WOS_AIDE_PROJECT_RESPONSE__', {
         detail: { error: error.message, success: false }
       }));
     }
   });
 
-  document.addEventListener('__ENLIGHTENKEY_PROJECT_UPDATE__', (event) => {
+  document.addEventListener('__WOS_AIDE_PROJECT_UPDATE__', (event) => {
     const name = event.detail?.projectName || null;
-    window.enlightenkeyProjectName = name;
+    window.wosAideProjectName = name;
   });
 
   window.getEnlightenkeyProjectName = function() {
-    return window.enlightenkeyProjectName || null;
+    return window.wosAideProjectName || null;
   };
 
   async function openProjectHandleStore() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('gewuaide-toolkit', 1);
+      const request = indexedDB.open('wosaide-toolkit', 1);
       request.onupgradeneeded = () => {
         request.result.createObjectStore('projectHandles');
       };
@@ -189,7 +189,7 @@
         tx.onerror = () => resolve();
       });
     } catch (error) {
-      console.warn('[EnlightenKey] Failed to store project handle:', error);
+      console.warn('[WOS Aide] Failed to store project handle:', error);
     }
   }
 
@@ -199,33 +199,33 @@
       if (await handle.queryPermission(opts) === 'granted') return true;
       return (await handle.requestPermission(opts)) === 'granted';
     } catch (error) {
-      console.warn('[EnlightenKey] Directory permission check failed:', error);
+      console.warn('[WOS Aide] Directory permission check failed:', error);
       return false;
     }
   }
 
-  document.addEventListener('__ENLIGHTENKEY_PICK_DIR__', async () => {
+  document.addEventListener('__WOS_AIDE_PICK_DIR__', async () => {
     if (!window.showDirectoryPicker) {
-      document.dispatchEvent(new CustomEvent('__ENLIGHTENKEY_PICK_DIR_RESPONSE__', {
+      document.dispatchEvent(new CustomEvent('__WOS_AIDE_PICK_DIR_RESPONSE__', {
         detail: { success: false, error: 'Directory picker not supported' }
       }));
       return;
     }
     try {
-      const handle = await window.showDirectoryPicker({ id: 'enlightenkey-project', mode: 'readwrite' });
+      const handle = await window.showDirectoryPicker({ id: 'wosAide-project', mode: 'readwrite' });
       const granted = await ensureDirectoryPermission(handle);
       if (!granted) {
-        document.dispatchEvent(new CustomEvent('__ENLIGHTENKEY_PICK_DIR_RESPONSE__', {
+        document.dispatchEvent(new CustomEvent('__WOS_AIDE_PICK_DIR_RESPONSE__', {
           detail: { success: false, error: 'Permission not granted' }
         }));
         return;
       }
       await setStoredProjectHandle(handle);
-      document.dispatchEvent(new CustomEvent('__ENLIGHTENKEY_PICK_DIR_RESPONSE__', {
+      document.dispatchEvent(new CustomEvent('__WOS_AIDE_PICK_DIR_RESPONSE__', {
         detail: { success: true }
       }));
     } catch (error) {
-      document.dispatchEvent(new CustomEvent('__ENLIGHTENKEY_PICK_DIR_RESPONSE__', {
+      document.dispatchEvent(new CustomEvent('__WOS_AIDE_PICK_DIR_RESPONSE__', {
         detail: { success: false, error: error.message }
       }));
     }

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "GEWU aide",
+  "name": "WOS Aide",
   "$schema": "https://json.schemastore.org/chrome-manifest.json",
   "version": "0.1.0",
-  "description": "GEWU aide Chrome Extension",
+  "description": "WOS Aide Chrome Extension",
   "icons": {
     "16": "icons/icon_16.png",
     "32": "icons/icon_32.png",
@@ -14,7 +14,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "GEWU aide",
+    "default_title": "WOS Aide",
     "default_popup": "popup.html"
   },
   "permissions": [
@@ -23,10 +23,27 @@
     "activeTab",
     "scripting"
   ],
+  "host_permissions": [
+    "https://api.openai.com/*",
+    "https://www.easyscholar.cc/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
   "content_scripts": [
     {
       "matches": [
-        "<all_urls>"
+        "*://www.webofscience.com/*",
+        "*://*.webofscience.com/*"
+      ],
+      "run_at": "document_idle",
+      "js": [
+        "contentScript.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://*.chatgpt.com/*"
       ],
       "run_at": "document_idle",
       "js": [
@@ -47,7 +64,6 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "injected.js",
         "z-Wos.js",
         "jquery-3.7.0.js",
         "all.min.css",
@@ -55,15 +71,40 @@
         "pub-fun.js",
         "z-easyscholar.js",
         "z-wos-doi-query.js",
-        "z-doi-pdf-download.js",
         "z-chat.js",
-        "chatgpt-prompts-quickload.js",
         "prompts/wos-query.md",
+        "injected.js",
         "module-bridge.js",
         "webfonts/*.woff2",
         "webfonts/*.ttf"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "*://www.webofscience.com/*",
+        "*://*.webofscience.com/*"
+      ]
+    },
+    {
+      "resources": [
+        "chatgpt-prompts-quickload.js"
+      ],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://*.chatgpt.com/*"
+      ]
+    },
+    {
+      "resources": [
+        "pub-fun.js",
+        "z-doi-pdf-download.js",
+        "all.min.css",
+        "all.min.js",
+        "webfonts/*.woff2",
+        "webfonts/*.ttf"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
   ]
 }

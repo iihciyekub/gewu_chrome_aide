@@ -2,14 +2,14 @@
   'use strict';
 
   const BUTTON_COUNT = 10;
-  const STORAGE_KEY = 'gewuaide-chatgpt-quickload-prompts';
-  const TITLE_KEY = 'gewuaide-chatgpt-quickload-titles';
+  const STORAGE_KEY = 'wosaide-chatgpt-quickload-prompts';
+  const TITLE_KEY = 'wosaide-chatgpt-quickload-titles';
   const CONTAINER_SELECTOR = '#thread-bottom > div > div > div.pointer-events-auto.relative.z-1.flex.h-\\(--composer-container-height\\,100\\%\\).max-w-full.flex-\\(--composer-container-flex\\,1\\).flex-col > form > div:nth-child(2) > div > div.-m-1.max-w-full.overflow-x-auto.p-1.\\[grid-area\\:footer\\].\\[scrollbar-width\\:none\\] > div.flex.min-w-fit.items-center.cant-hover\\:px-1\\.5.cant-hover\\:gap-1\\.5';
-  const HOST_DATA_ATTR = 'data-gewuaide-quickload-host';
+  const HOST_DATA_ATTR = 'data-wosaide-quickload-host';
   const TEXTAREA_SELECTOR = '#prompt-textarea, textarea[data-testid="prompt-textarea"], textarea[name="prompt"]';
   const CONTENTEDITABLE_SELECTOR = '[contenteditable="true"][data-testid="prompt-textarea"], [contenteditable="true"][aria-label="Message"], [contenteditable="true"][role="textbox"]';
-  const WRAP_DATA_ATTR = 'data-gewuaide-quickload';
-  const POPOVER_ID = 'gewuaide-quickload-popover';
+  const WRAP_DATA_ATTR = 'data-wosaide-quickload';
+  const POPOVER_ID = 'wosaide-quickload-popover';
   let popoverEscHandler = null;
   let cachedPromptTarget = null;
   let cachedPromptType = null;
@@ -17,7 +17,7 @@
 
   const isLocalStorageAvailable = (() => {
     try {
-      const probeKey = '__gewuaide_storage_probe__';
+      const probeKey = '__wosaide_storage_probe__';
       localStorage.setItem(probeKey, '1');
       localStorage.removeItem(probeKey);
       return true;
@@ -27,9 +27,9 @@
   })();
 
   const requestStorage = (action, key, value) => new Promise((resolve) => {
-    const requestId = `gewuaide-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const requestId = `wosaide-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const handler = (event) => {
-      if (!event?.data || event.data.type !== 'GEWU_QUICKLOAD_STORAGE_RESPONSE') {
+      if (!event?.data || event.data.type !== 'WOS_AIDE_QUICKLOAD_STORAGE_RESPONSE') {
         return;
       }
       if (event.data.requestId !== requestId) {
@@ -40,7 +40,7 @@
     };
     window.addEventListener('message', handler);
     window.postMessage({
-      type: 'GEWU_QUICKLOAD_STORAGE',
+      type: 'WOS_AIDE_QUICKLOAD_STORAGE',
       action,
       key,
       value,

@@ -133,7 +133,7 @@ class WebFuncs {
 
     async #openProjectHandleStore() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open('gewuaide-toolkit', 1);
+            const request = indexedDB.open('wosaide-toolkit', 1);
             request.onupgradeneeded = () => {
                 request.result.createObjectStore('projectHandles');
             };

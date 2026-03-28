@@ -49,12 +49,10 @@ const mapping = {
 };
 
 
-// Global variable for EasyScholar API key
-window.easyscholar_api_key = "";
-
 // LocalStorage keys for history
 const JOURNAL_HISTORY_KEY = "wos-easyscholar-journal-history";
 const MAX_HISTORY_ITEMS = 50;
+const JOURNAL_LAYOUT_SYNC_EVENT = "__WOS_AIDE_JOURNAL_LAYOUT_SYNC__";
 
 // Save journal query to history
 function saveJournalQuery(journalName, result) {
@@ -111,30 +109,36 @@ function getErrorMessage(error) {
 }
 
 async function getPublicationRank(SO) {
-    const apiKey = (window.easyscholar_api_key || "").trim();
-    if (!apiKey) {
-        console.warn("EasyScholar API key is required before querying");
-        return null;
-    }
-    const encoded = encodeURIComponent(SO);
-    const url = `https://www.easyscholar.cc/open/getPublicationRank?secretKey=${apiKey}&publicationName=${encoded}`;
+    const requestId = `wosaide-easyscholar-query-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.code !== 200) {
-            console.warn(`请求失败：${data.message || "unknown response"}`);
+        const response = await new Promise((resolve) => {
+            const handler = (event) => {
+                if (event?.detail?.requestId !== requestId) {
+                    return;
+                }
+                document.removeEventListener("__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_RESPONSE__", handler);
+                resolve(event.detail);
+            };
+            document.addEventListener("__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_RESPONSE__", handler);
+            document.dispatchEvent(new CustomEvent("__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_REQUEST__", {
+                detail: {
+                    requestId,
+                    publicationName: SO
+                }
+            }));
+            setTimeout(() => {
+                document.removeEventListener("__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_RESPONSE__", handler);
+                resolve({ success: false, error: 'EasyScholar request timed out.' });
+            }, 15000);
+        });
+
+        if (!response?.success || !response?.result) {
+            console.warn(`请求失败：${response?.error || "unknown response"}`);
             return null;
         }
 
-        const rea = data.data.officialRank.all;
-        const mappedRea = {};
-        for (const key in rea) {
-            mappedRea[mapping[key] || key] = rea[key];
-        }
-        // Save to history
-        saveJournalQuery(SO, mappedRea);
-
-        return mappedRea;
+        saveJournalQuery(SO, response.result);
+        return response.result;
     } catch (err) {
         console.warn(`请求失败：${getErrorMessage(err)}`);
         return null;
@@ -148,9 +152,9 @@ async function getPublicationRank(SO) {
     try {
     const PANEL_FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     const requestStorage = (action, key, value) => new Promise((resolve) => {
-        const requestId = `gewuaide-easyscholar-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const requestId = `wosaide-easyscholar-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const handler = (event) => {
-            if (!event?.data || event.data.type !== "GEWU_QUICKLOAD_STORAGE_RESPONSE") {
+            if (!event?.data || event.data.type !== "WOS_AIDE_QUICKLOAD_STORAGE_RESPONSE") {
                 return;
             }
             if (event.data.requestId !== requestId) {
@@ -161,7 +165,7 @@ async function getPublicationRank(SO) {
         };
         window.addEventListener("message", handler);
         window.postMessage({
-            type: "GEWU_QUICKLOAD_STORAGE",
+            type: "WOS_AIDE_QUICKLOAD_STORAGE",
             action,
             key,
             value,
@@ -255,11 +259,9 @@ async function getPublicationRank(SO) {
     const savedTop = localStorage.getItem(POSITION_TOP_KEY) || "100px";
     const savedLeft = localStorage.getItem(POSITION_LEFT_KEY) || null;
     const savedSettingsVisible = localStorage.getItem(SETTINGS_VISIBLE_KEY);
-    const savedApiKey = await loadApiKey(API_KEY_STORAGE, "");
+    await loadApiKey(API_KEY_STORAGE, "");
 
     // Initialize global variable
-    window.easyscholar_api_key = savedApiKey.trim();
-
     // Main container
     const box = document.createElement("div")
     box.id = "wos_easyscholar_panel";
@@ -404,7 +406,7 @@ async function getPublicationRank(SO) {
     const contentBox = document.createElement("div");
     contentBox.style.display = "flex";
     contentBox.style.flexDirection = "column";
-    contentBox.style.flex = "1";
+    contentBox.style.flex = "0 0 auto";
     contentBox.style.minHeight = "0";
     contentBox.style.gap = "6px";
     contentBox.style.padding = "8px";
@@ -450,18 +452,17 @@ async function getPublicationRank(SO) {
         return key.substring(0, 6) + "****" + key.substring(key.length - 4);
     }
 
-    // Initialize display with masked value
-    apiInput.value = maskApiKey(savedApiKey);
+    // Initialize display without exposing stored key into the page context.
+    apiInput.value = "";
 
     // Store actual API key value
-    let actualApiKey = savedApiKey.trim();
+    let actualApiKey = "";
     let isApiFocused = false;
 
     const handleApiKeySync = (event) => {
-        const syncedApiKey = (event?.detail?.apiKey || "").trim();
+        const syncedApiKey = typeof event?.detail?.apiKey === "string" ? event.detail.apiKey.trim() : actualApiKey;
         actualApiKey = syncedApiKey;
-        window.easyscholar_api_key = syncedApiKey;
-        if (!isApiFocused) {
+        if (!isApiFocused && actualApiKey) {
             apiInput.value = maskApiKey(actualApiKey);
         }
     };
@@ -483,9 +484,6 @@ async function getPublicationRank(SO) {
     apiInput.addEventListener("input", (e) => {
         if (isApiFocused) {
             actualApiKey = e.target.value.trim();
-            // Update global variable
-            window.easyscholar_api_key = actualApiKey;
-            // Save to localStorage
             saveApiKey(API_KEY_STORAGE, actualApiKey);
             console.log("EasyScholar API key updated");
         }
@@ -536,10 +534,12 @@ async function getPublicationRank(SO) {
         statusBar.style.color = color || "rgba(255,255,255,0.82)";
     }
 
-    function ensureApiKeyConfigured() {
-        actualApiKey = (actualApiKey || "").trim();
-        window.easyscholar_api_key = actualApiKey;
+    async function ensureApiKeyConfigured() {
+        actualApiKey = ((await requestStorage("get", API_KEY_STORAGE)) || actualApiKey || "").trim();
         if (actualApiKey) {
+            if (!isApiFocused) {
+                apiInput.value = maskApiKey(actualApiKey);
+            }
             return true;
         }
         console.warn("EasyScholar API key is not configured");
@@ -632,7 +632,7 @@ async function getPublicationRank(SO) {
         } else if (e.key === "Enter") {
             const so = soInput.value.trim();
             if (!so) return;
-            if (!ensureApiKeyConfigured()) return;
+            if (!(await ensureApiKeyConfigured())) return;
 
             // Reset history index
             historyIndex = -1;
@@ -814,7 +814,7 @@ async function getPublicationRank(SO) {
                 soInput.value = capturedText;
                 // Auto-stop capture after successful capture
                 stopCapture();
-                if (!ensureApiKeyConfigured()) {
+                if (!(await ensureApiKeyConfigured())) {
                     return;
                 }
 
@@ -870,7 +870,7 @@ async function getPublicationRank(SO) {
             
             // When modifier key is released, execute query if text was captured
             if (lastCapturedText) {
-                if (!ensureApiKeyConfigured()) {
+                if (!(await ensureApiKeyConfigured())) {
                     lastCapturedText = "";
                     return;
                 }
@@ -951,7 +951,7 @@ async function getPublicationRank(SO) {
             console.warn("Please enter journal name");
             return;
         }
-        if (!ensureApiKeyConfigured()) {
+        if (!(await ensureApiKeyConfigured())) {
             return;
         }
 
@@ -1020,8 +1020,8 @@ async function getPublicationRank(SO) {
     const resultContainer = document.createElement("div");
     resultContainer.style.display = "none";
     resultContainer.style.flexShrink = "0";
-    resultContainer.style.maxHeight = "500px";
-    resultContainer.style.overflowY = "auto";
+    resultContainer.style.maxHeight = "none";
+    resultContainer.style.overflow = "visible";
     resultContainer.style.background = "#ffffff";
     resultContainer.style.border = "1px solid #dde4ec";
     resultContainer.style.borderRadius = "10px";
@@ -1036,10 +1036,20 @@ async function getPublicationRank(SO) {
     resultContainer.appendChild(resultTable);
     contentBox.appendChild(resultContainer);
 
+    const syncJournalLayout = () => {
+        document.dispatchEvent(new CustomEvent(JOURNAL_LAYOUT_SYNC_EVENT, {
+            detail: {
+                visible: resultContainer.style.display !== "none",
+                contentHeight: contentBox.scrollHeight || 0
+            }
+        }));
+    };
+
     // Function to display result in table
     function displayResultTable(result) {
         if (!result || Object.keys(result).length === 0) {
             resultContainer.style.display = "none";
+            syncJournalLayout();
             return;
         }
 
@@ -1101,6 +1111,7 @@ async function getPublicationRank(SO) {
 
         resultTable.appendChild(tbody);
         resultContainer.style.display = "block";
+        syncJournalLayout();
     }
 
     const focusPanelInput = () => {

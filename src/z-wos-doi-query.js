@@ -62,7 +62,7 @@ window.wosids = [];
     }
 
     const openProjectHandleStore = async () => new Promise((resolve, reject) => {
-        const request = indexedDB.open('gewuaide-toolkit', 1);
+        const request = indexedDB.open('wosaide-toolkit', 1);
         request.onupgradeneeded = () => {
             request.result.createObjectStore('projectHandles');
         };
@@ -113,14 +113,14 @@ window.wosids = [];
         if (!window.showDirectoryPicker) {
             throw new Error('当前浏览器不支持目录选择');
         }
-        const handle = await window.showDirectoryPicker({ id: 'enlightenkey-project', mode: 'readwrite' });
+        const handle = await window.showDirectoryPicker({ id: 'wosAide-project', mode: 'readwrite' });
         const granted = await ensureDirectoryPermission(handle);
         if (!granted) {
             throw new Error('无写入权限');
         }
         exportDirHandle = handle;
         exportDirName = handle.name || '';
-        window.enlightenkeyDirectoryHandle = handle;
+        window.wosAideDirectoryHandle = handle;
         await setStoredProjectHandle(handle);
         return handle;
     };
@@ -146,9 +146,9 @@ window.wosids = [];
     };
 
     const requestStorage = (action, key, value) => new Promise((resolve) => {
-        const requestId = `gewuaide-wos-doi-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const requestId = `wosaide-wos-doi-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const handler = (event) => {
-            if (!event?.data || event.data.type !== "GEWU_QUICKLOAD_STORAGE_RESPONSE") {
+            if (!event?.data || event.data.type !== "WOS_AIDE_QUICKLOAD_STORAGE_RESPONSE") {
                 return;
             }
             if (event.data.requestId !== requestId) {
@@ -159,7 +159,7 @@ window.wosids = [];
         };
         window.addEventListener("message", handler);
         window.postMessage({
-            type: "GEWU_QUICKLOAD_STORAGE",
+            type: "WOS_AIDE_QUICKLOAD_STORAGE",
             action,
             key,
             value,
@@ -195,6 +195,7 @@ window.wosids = [];
     const WOS_QUERY_OPENAI_VERIFIED_KEY = "wosOpenaiVerified";
     const WOS_QUERY_LMSTUDIO_VERIFIED_KEY = "wosLmStudioVerified";
     const WOS_QUERY_ACCESS_SYNC_EVENT = "__WOS_QUERY_ACCESS_SYNC__";
+    const JOURNAL_LAYOUT_SYNC_EVENT = "__WOS_AIDE_JOURNAL_LAYOUT_SYNC__";
     const LM_STUDIO_BASE_URL_STORAGE_KEY = "wosLmStudioBaseUrl";
     const LM_STUDIO_MODEL_STORAGE_KEY = "wosLmStudioModel";
     const LM_STUDIO_API_KEY_STORAGE_KEY = "wosLmStudioApiKey";
@@ -528,6 +529,33 @@ window.wosids = [];
     let isCollapsed = savedCollapsed;
     let expandedHeightPx = initialHeight;
 
+    const autoResizeForJournalTab = (contentHeight = 0) => {
+        if (isCollapsed || box.style.display === 'none' || journalTabPanel.style.display === 'none') {
+            return;
+        }
+
+        requestAnimationFrame(() => {
+            const controlHeight = controlRow.offsetHeight || 40;
+            const tabHeight = tabRow.offsetHeight || 32;
+            const wrapStyle = window.getComputedStyle(tabContentWrap);
+            const wrapPaddingTop = parseFloat(wrapStyle.paddingTop || '0') || 0;
+            const wrapPaddingBottom = parseFloat(wrapStyle.paddingBottom || '0') || 0;
+            const journalContentHeight = Math.max(
+                contentHeight || 0,
+                journalTabPanel.scrollHeight || 0
+            );
+            const desiredHeight = Math.ceil(
+                controlHeight + tabHeight + wrapPaddingTop + wrapPaddingBottom + journalContentHeight
+            );
+            const nextHeight = Math.max(320, desiredHeight);
+            expandedHeightPx = nextHeight;
+            box.style.height = `${nextHeight}px`;
+            box.style.minHeight = `${nextHeight}px`;
+            writeStorage(HEIGHT_KEY, box.style.height);
+            ensurePanelInView();
+        });
+    };
+
     const applyCollapsedState = () => {
         tabRow.style.display = isCollapsed ? 'none' : 'flex';
         tabContentWrap.style.display = isCollapsed ? 'none' : 'flex';
@@ -629,6 +657,9 @@ window.wosids = [];
         if (isExport && typeof refreshExportUuidInfo === 'function') {
             refreshExportUuidInfo();
         }
+        if (isJournal) {
+            autoResizeForJournalTab();
+        }
     };
 
     queryTabBtn.onclick = () => setActiveTab('query');
@@ -683,7 +714,8 @@ window.wosids = [];
         easyScholarPanel.style.pointerEvents = 'none';
         content.style.padding = '0';
         content.style.gap = '6px';
-        content.style.minHeight = '100%';
+        content.style.minHeight = '0';
+        content.style.height = 'auto';
         content.style.boxSizing = 'border-box';
         journalTabPanel.appendChild(content);
         journalTabPanel.dataset.easyscholarMounted = 'true';
@@ -730,6 +762,10 @@ window.wosids = [];
             enabled: Boolean(event?.detail?.enabled),
             verified: Boolean(event?.detail?.verified)
         });
+    });
+
+    document.addEventListener(JOURNAL_LAYOUT_SYNC_EVENT, (event) => {
+        autoResizeForJournalTab(Number(event?.detail?.contentHeight) || 0);
     });
 
     ensureEasyScholarMounted();
@@ -1008,6 +1044,49 @@ window.wosids = [];
     exportUuidInput.style.fontFamily = "Consolas, 'Courier New', monospace";
     exportUuidInput.style.outline = 'none';
 
+    const EXPORT_UUID_AUTO_EXTRACT_KEY = 'export-uuid-auto-extract';
+    let exportUuidAutoExtractEnabled = readStorage(EXPORT_UUID_AUTO_EXTRACT_KEY, "true") === "true";
+
+    const exportUuidMetaRow = document.createElement('div');
+    exportUuidMetaRow.style.display = 'flex';
+    exportUuidMetaRow.style.alignItems = 'center';
+    exportUuidMetaRow.style.justifyContent = 'space-between';
+    exportUuidMetaRow.style.gap = '8px';
+
+    const exportUuidFormatHint = document.createElement('div');
+    exportUuidFormatHint.style.color = '#6b7c93';
+    exportUuidFormatHint.style.fontSize = '10px';
+    exportUuidFormatHint.style.lineHeight = '1.4';
+    exportUuidFormatHint.textContent = 'UUID format: 8-4-4-4-12-10';
+
+    const exportUuidAutoExtractBtn = document.createElement('button');
+    exportUuidAutoExtractBtn.style.padding = '3px 8px';
+    exportUuidAutoExtractBtn.style.height = '24px';
+    exportUuidAutoExtractBtn.style.borderRadius = '8px';
+    exportUuidAutoExtractBtn.style.cursor = 'pointer';
+    exportUuidAutoExtractBtn.style.fontSize = '11px';
+    exportUuidAutoExtractBtn.style.fontWeight = '600';
+    exportUuidAutoExtractBtn.style.outline = 'none';
+    exportUuidAutoExtractBtn.style.whiteSpace = 'nowrap';
+    exportUuidAutoExtractBtn.title = 'Toggle auto-extract UUID from pasted text';
+
+    const syncExportUuidAutoExtractBtn = () => {
+        exportUuidAutoExtractBtn.textContent = exportUuidAutoExtractEnabled ? 'Auto: ON' : 'Auto: OFF';
+        exportUuidAutoExtractBtn.style.background = exportUuidAutoExtractEnabled ? '#edf4fa' : '#f7f9fb';
+        exportUuidAutoExtractBtn.style.color = exportUuidAutoExtractEnabled ? '#174b78' : '#486581';
+        exportUuidAutoExtractBtn.style.border = exportUuidAutoExtractEnabled ? '1px solid #9eb6cb' : '1px solid #d0d9e3';
+    };
+    syncExportUuidAutoExtractBtn();
+
+    exportUuidAutoExtractBtn.onclick = () => {
+        exportUuidAutoExtractEnabled = !exportUuidAutoExtractEnabled;
+        writeStorage(EXPORT_UUID_AUTO_EXTRACT_KEY, exportUuidAutoExtractEnabled.toString());
+        syncExportUuidAutoExtractBtn();
+    };
+
+    exportUuidMetaRow.appendChild(exportUuidFormatHint);
+    exportUuidMetaRow.appendChild(exportUuidAutoExtractBtn);
+
     const openUuidPageBtn = document.createElement('button');
     openUuidPageBtn.textContent = 'Open UUID Page';
     openUuidPageBtn.style.display = 'block';
@@ -1024,6 +1103,7 @@ window.wosids = [];
 
     exportUuidJumpWrap.appendChild(exportUuidJumpHint);
     exportUuidJumpWrap.appendChild(exportUuidInput);
+    exportUuidJumpWrap.appendChild(exportUuidMetaRow);
     exportUuidJumpWrap.appendChild(openUuidPageBtn);
     exportFlowGroup.appendChild(exportUuidJumpWrap);
 
@@ -1032,9 +1112,13 @@ window.wosids = [];
         currentExportUuid = String(uuid || '').trim();
         const hasUuid = Boolean(currentExportUuid);
         selectExportDirBtn.style.display = hasUuid ? 'block' : 'none';
+        exportFormatRow.style.display = hasUuid ? 'flex' : 'none';
         exportBtn.style.display = hasUuid ? 'block' : 'none';
         exportUuidJumpWrap.style.display = hasUuid ? 'none' : 'flex';
         exportFlowHint.style.display = hasUuid ? 'block' : 'none';
+        if (!hasUuid) {
+            exportProgressWrap.style.display = 'none';
+        }
     };
 
     const UUID_URL_PATTERN = /[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}-[A-Fa-f0-9]{10}/;
@@ -1046,6 +1130,37 @@ window.wosids = [];
     };
 
     const isValidUuid = (value = '') => UUID_URL_PATTERN.test(String(value || '').trim());
+
+    const extractUuidFromText = (value = '') => {
+        const text = String(value || '').trim();
+        const match = text.match(UUID_URL_PATTERN);
+        return match ? match[0] : '';
+    };
+
+    const syncExportUuidInputHint = (value = '') => {
+        const rawValue = String(value || '').trim();
+        if (!rawValue) {
+            exportUuidFormatHint.textContent = 'UUID format: 8-4-4-4-12-10';
+            exportUuidFormatHint.style.color = '#6b7c93';
+            return;
+        }
+
+        const extractedUuid = extractUuidFromText(rawValue);
+        if (extractedUuid && rawValue !== extractedUuid) {
+            exportUuidFormatHint.textContent = `Extracted UUID: ${extractedUuid}`;
+            exportUuidFormatHint.style.color = '#174b78';
+            return;
+        }
+
+        if (isValidUuid(rawValue)) {
+            exportUuidFormatHint.textContent = 'UUID format matched: 8-4-4-4-12-10';
+            exportUuidFormatHint.style.color = '#2f855a';
+            return;
+        }
+
+        exportUuidFormatHint.textContent = 'Invalid UUID. Expected format: 8-4-4-4-12-10';
+        exportUuidFormatHint.style.color = '#a5483f';
+    };
 
     const refreshExportUuidInfo = () => {
         const uuid = extractUuidFromCurrentUrl();
@@ -1189,6 +1304,7 @@ window.wosids = [];
             if (window.wos && window.wos.uuid && typeof window.wos.uuid.open === 'function') {
                 await window.wos.uuid.open(uuid);
                 exportUuidInput.value = uuid;
+                syncExportUuidInputHint(uuid);
                 refreshExportUuidInfo();
             } else {
                 throw new Error('window.wos.uuid.open is unavailable');
@@ -1208,12 +1324,27 @@ window.wosids = [];
         }
     });
 
+    exportUuidInput.addEventListener('input', () => {
+        syncExportUuidInputHint(exportUuidInput.value);
+    });
+
+    exportUuidInput.addEventListener('paste', (event) => {
+        if (!exportUuidAutoExtractEnabled) {
+            return;
+        }
+        event.preventDefault();
+        const pastedText = (event.clipboardData || window.clipboardData).getData('text');
+        const extractedUuid = extractUuidFromText(pastedText);
+        exportUuidInput.value = extractedUuid || String(pastedText || '').trim();
+        syncExportUuidInputHint(exportUuidInput.value);
+    });
+
     // 尝试从 popup 写入的 handle 恢复目录
     loadStoredProjectHandle().then((handle) => {
         if (!handle) return;
         exportDirHandle = handle;
         exportDirName = handle.name || '';
-        window.enlightenkeyDirectoryHandle = handle;
+        window.wosAideDirectoryHandle = handle;
         syncExportFlowState();
     });
 
@@ -1425,6 +1556,7 @@ window.wosids = [];
     };
 
     syncExportFlowState();
+    syncExportUuidInputHint(exportUuidInput.value);
     refreshExportUuidInfo();
 
 
@@ -1434,13 +1566,13 @@ window.wosids = [];
     async function updateAsyncDoiBtnText() {
         const doiList = await new Promise(resolve => {
             function handleDoiListMsg(event) {
-                if (event.data && event.data.type === 'ENLIGHTENKEY_DOI_LIST_RESPONSE') {
+                if (event.data && event.data.type === 'WOS_AIDE_DOI_LIST_RESPONSE') {
                     window.removeEventListener('message', handleDoiListMsg);
                     resolve(event.data.doiList || []);
                 }
             }
             window.addEventListener('message', handleDoiListMsg);
-            window.postMessage({ type: 'ENLIGHTENKEY_DOI_LIST_REQUEST' }, '*');
+            window.postMessage({ type: 'WOS_AIDE_DOI_LIST_REQUEST' }, '*');
             setTimeout(() => {
                 window.removeEventListener('message', handleDoiListMsg);
                 resolve([]);
@@ -1451,7 +1583,7 @@ window.wosids = [];
             return;
         }
         asyncDoiBtn.style.display = 'block';
-        asyncDoiBtn.textContent = `Open GEWU DOIList (${doiList.length})`;
+        asyncDoiBtn.textContent = `Open WOS Aide DOI List (${doiList.length})`;
     }
 
     asyncDoiBtn.style.display = 'none';
@@ -1479,13 +1611,13 @@ window.wosids = [];
             // 1. 通过 window.postMessage 请求 contentScript 代为获取 DOI 列表
             const doiList = await new Promise(resolve => {
                 function handleDoiListMsg(event) {
-                    if (event.data && event.data.type === 'ENLIGHTENKEY_DOI_LIST_RESPONSE') {
+                    if (event.data && event.data.type === 'WOS_AIDE_DOI_LIST_RESPONSE') {
                         window.removeEventListener('message', handleDoiListMsg);
                         resolve(event.data.doiList || []);
                     }
                 }
                 window.addEventListener('message', handleDoiListMsg);
-                window.postMessage({ type: 'ENLIGHTENKEY_DOI_LIST_REQUEST' }, '*');
+                window.postMessage({ type: 'WOS_AIDE_DOI_LIST_REQUEST' }, '*');
                 // 超时兜底
                 setTimeout(() => {
                     window.removeEventListener('message', handleDoiListMsg);
@@ -1502,9 +1634,9 @@ window.wosids = [];
                 await window.wos.query_wosid_or_doi([], doiList);
             }
             // 3. 输出 DOI 数量
-            console.log('[Async GEWU DOIList] DOI数量:', doiList.length);
+            console.log('[Async WOS Aide DOI List] DOI数量:', doiList.length);
 
-            asyncDoiBtn.textContent = 'opened GEWU DOIs!';
+            asyncDoiBtn.textContent = 'Opened WOS Aide DOIs!';
         } catch (err) {
             asyncDoiBtn.textContent = 'failed to open DOIs';
         } finally {
@@ -1563,6 +1695,67 @@ window.wosids = [];
     wosQueryHint.textContent = 'Enter for newline, Ctrl/Cmd+Enter to send';
     wosQueryHint.style.color = '#6b7c93';
     wosQueryHint.style.lineHeight = '1.4';
+
+    const wosQueryModelHint = document.createElement('div');
+    wosQueryModelHint.style.display = 'flex';
+    wosQueryModelHint.style.alignItems = 'center';
+    wosQueryModelHint.style.gap = '6px';
+    wosQueryModelHint.style.padding = '0';
+    wosQueryModelHint.style.border = 'none';
+    wosQueryModelHint.style.borderRadius = '0';
+    wosQueryModelHint.style.background = 'transparent';
+    wosQueryModelHint.style.boxShadow = 'none';
+    wosQueryModelHint.style.fontSize = '11px';
+    wosQueryModelHint.style.lineHeight = '1.3';
+
+    const wosQueryModelIcon = document.createElement('span');
+    wosQueryModelIcon.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i>';
+    wosQueryModelIcon.style.display = 'inline-flex';
+    wosQueryModelIcon.style.alignItems = 'center';
+    wosQueryModelIcon.style.justifyContent = 'center';
+    wosQueryModelIcon.style.width = '16px';
+    wosQueryModelIcon.style.height = '16px';
+    wosQueryModelIcon.style.color = '#174b78';
+    wosQueryModelIcon.style.fontSize = '11px';
+    wosQueryModelIcon.style.flexShrink = '0';
+
+    const wosQueryModelText = document.createElement('div');
+    wosQueryModelText.style.display = 'flex';
+    wosQueryModelText.style.flexWrap = 'nowrap';
+    wosQueryModelText.style.alignItems = 'center';
+    wosQueryModelText.style.gap = '4px';
+    wosQueryModelText.style.minWidth = '0';
+    wosQueryModelText.style.color = '#4d657b';
+
+    const wosQueryProviderBadge = document.createElement('span');
+    wosQueryProviderBadge.style.display = 'inline-flex';
+    wosQueryProviderBadge.style.alignItems = 'center';
+    wosQueryProviderBadge.style.padding = '1px 6px';
+    wosQueryProviderBadge.style.borderRadius = '999px';
+    wosQueryProviderBadge.style.fontSize = '10px';
+    wosQueryProviderBadge.style.fontWeight = '700';
+    wosQueryProviderBadge.style.letterSpacing = '0.15px';
+    wosQueryProviderBadge.style.border = '1px solid transparent';
+
+    const wosQueryModelLabel = document.createElement('span');
+    wosQueryModelLabel.textContent = '·';
+    wosQueryModelLabel.style.color = '#8aa0b5';
+    wosQueryModelLabel.style.fontWeight = '600';
+
+    const wosQueryModelValue = document.createElement('span');
+    wosQueryModelValue.style.color = '#163956';
+    wosQueryModelValue.style.fontWeight = '700';
+    wosQueryModelValue.style.fontSize = '11px';
+    wosQueryModelValue.style.whiteSpace = 'nowrap';
+    wosQueryModelValue.style.overflow = 'hidden';
+    wosQueryModelValue.style.textOverflow = 'ellipsis';
+    wosQueryModelValue.style.wordBreak = 'break-word';
+
+    wosQueryModelText.appendChild(wosQueryProviderBadge);
+    wosQueryModelText.appendChild(wosQueryModelLabel);
+    wosQueryModelText.appendChild(wosQueryModelValue);
+    wosQueryModelHint.appendChild(wosQueryModelIcon);
+    wosQueryModelHint.appendChild(wosQueryModelText);
 
     // WOS Query 提交按钮
     const wosQueryBtn = document.createElement('button');
@@ -1691,42 +1884,6 @@ Additional output rules:
         };
     };
 
-    const callOpenAI = async (apiKey, jsonData) => {
-        const response = await fetch('https://api.openai.com/v1/responses', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify(jsonData)
-        });
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API Error: ${response.status} - ${errorText}`);
-        }
-        return response.json();
-    };
-
-    const callLmStudio = async (baseUrl, apiKey, payload) => {
-        const normalizedBaseUrl = (baseUrl || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
-        const headers = {
-            'Content-Type': 'application/json'
-        };
-        if (apiKey) {
-            headers['Authorization'] = `Bearer ${apiKey}`;
-        }
-        const response = await fetch(`${normalizedBaseUrl}/chat/completions`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`LM Studio Error: ${response.status} - ${errorText}`);
-        }
-        return response.json();
-    };
-
     const extractRowTextFromResult = async (rawText) => {
         const jsonText = extractJsonText(rawText);
         const parsedResult = JSON.parse(jsonText);
@@ -1743,38 +1900,60 @@ Additional output rules:
 
     const runWosQueryByProvider = async (text) => {
         const provider = (await requestStorage("get", WOS_QUERY_PROVIDER_STORAGE_KEY)) || 'openai';
-        const systemPrompt = buildStrictWosQueryPrompt(await loadPrompt());
-
-        if (provider === 'lmstudio') {
-            const baseUrl = (await requestStorage("get", LM_STUDIO_BASE_URL_STORAGE_KEY)) || 'http://127.0.0.1:1234/v1';
-            const model = (await requestStorage("get", LM_STUDIO_MODEL_STORAGE_KEY)) || '';
-            const apiKey = (await requestStorage("get", LM_STUDIO_API_KEY_STORAGE_KEY)) || '';
-            if (!model) {
-                throw new Error('LM Studio model missing. Please set it in popup.');
-            }
-            const payload = {
-                model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: text }
-                ],
-                temperature: 0,
-                max_tokens: 1024
+        const requestId = `wosaide-wos-query-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const response = await new Promise((resolve) => {
+            const handler = (event) => {
+                if (event?.detail?.requestId !== requestId) {
+                    return;
+                }
+                document.removeEventListener("__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__", handler);
+                resolve(event.detail);
             };
-            const result = await callLmStudio(baseUrl, apiKey, payload);
-            const rawText = result?.choices?.[0]?.message?.content || '';
-            return extractRowTextFromResult(rawText);
+            document.addEventListener("__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__", handler);
+            document.dispatchEvent(new CustomEvent("__WOS_AIDE_GENERATE_WOS_QUERY_REQUEST__", {
+                detail: {
+                    requestId,
+                    text,
+                    provider
+                }
+            }));
+            setTimeout(() => {
+                document.removeEventListener("__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__", handler);
+                resolve({ success: false, error: 'Query request timed out.' });
+            }, 15000);
+        });
+
+        if (!response?.success || !response?.rowText) {
+            throw new Error(response?.error || 'Failed to generate WOS query.');
         }
 
-        const apiKey = (await requestStorage("get", CHAT_API_KEY_STORAGE_KEY)) || '';
-        const model = (await requestStorage("get", CHAT_MODEL_STORAGE_KEY)) || 'gpt-4o-mini';
-        if (!apiKey) {
-            throw new Error('OpenAI API key missing. Please set it in popup.');
-        }
-        const jsonData = await buildOpenAIWosQueryPayload(text, model);
-        const result = await callOpenAI(apiKey, jsonData);
-        const rawText = result?.output?.[0]?.content?.[0]?.text || '';
+        const rawText = JSON.stringify({ wos_query: [{ rowText: response.rowText }] });
         return extractRowTextFromResult(rawText);
+    };
+
+    const refreshWosQueryModelHint = async () => {
+        const provider = ((await requestStorage("get", WOS_QUERY_PROVIDER_STORAGE_KEY)) || 'openai').toString().trim().toLowerCase();
+        let model = '';
+        if (provider === 'lmstudio') {
+            model = ((await requestStorage("get", LM_STUDIO_MODEL_STORAGE_KEY)) || '').toString().trim();
+            wosQueryProviderBadge.textContent = 'LM Studio';
+            wosQueryProviderBadge.style.background = '#f1f8f3';
+            wosQueryProviderBadge.style.color = '#1f6a43';
+            wosQueryProviderBadge.style.borderColor = '#cfe6d7';
+            wosQueryModelIcon.innerHTML = '<i class="fa-solid fa-microchip"></i>';
+            wosQueryModelIcon.style.color = '#1f6a43';
+            wosQueryModelValue.textContent = model || 'not set';
+            return;
+        }
+
+        model = ((await requestStorage("get", CHAT_MODEL_STORAGE_KEY)) || 'gpt-4o-mini').toString().trim() || 'gpt-4o-mini';
+        wosQueryProviderBadge.textContent = 'OpenAI';
+        wosQueryProviderBadge.style.background = '#eef5fb';
+        wosQueryProviderBadge.style.color = '#1a5d93';
+        wosQueryProviderBadge.style.borderColor = '#d2e3f2';
+        wosQueryModelIcon.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i>';
+        wosQueryModelIcon.style.color = '#174b78';
+        wosQueryModelValue.textContent = model;
     };
 
     // 处理提交
@@ -1844,9 +2023,16 @@ Additional output rules:
         }
     });
 
+    refreshWosQueryModelHint();
+
+    document.addEventListener(WOS_QUERY_ACCESS_SYNC_EVENT, () => {
+        refreshWosQueryModelHint();
+    });
+
     wosQueryActions.appendChild(wosQueryHint);
     wosQueryActions.appendChild(wosQueryBtn);
     wosQueryRow.appendChild(wosQueryInput);
+    wosQueryRow.appendChild(wosQueryModelHint);
     wosQueryRow.appendChild(wosQueryActions);
     builderTabPanel.appendChild(wosQueryRow);
     box.appendChild(resizeHandle);

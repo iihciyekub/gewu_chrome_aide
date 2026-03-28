@@ -3,141 +3,6 @@
  * Dec 4, 2025
  */
 
-// Global variables
-window.openai_api_key = "";
-window.openai_chat_model = "gpt-4o-mini";
-
-const PROMPT_PATHS = {
-    wosQuery: 'prompts/wos-query.md',
-};
-
-const PROMPT_CACHE = new Map();
-
-const EXTENSION_BASE_URL = (() => {
-    try {
-        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-            return chrome.runtime.getURL('');
-        }
-    } catch (e) {
-        // No-op: fall back to script-based URL resolution below.
-    }
-    const scriptUrl = (document.currentScript && document.currentScript.src) || '';
-    if (scriptUrl) {
-        return new URL('.', scriptUrl).toString();
-    }
-    return '';
-})();
-
-function _getPromptUrl(relativePath) {
-    if (EXTENSION_BASE_URL) {
-        return new URL(relativePath, EXTENSION_BASE_URL).toString();
-    }
-    return relativePath;
-}
-
-async function _loadPrompt(key) {
-    if (PROMPT_CACHE.has(key)) {
-        return PROMPT_CACHE.get(key);
-    }
-    const relativePath = PROMPT_PATHS[key];
-    if (!relativePath) {
-        throw new Error(`Unknown prompt key: ${key}`);
-    }
-    const url = _getPromptUrl(relativePath);
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Failed to load prompt: ${key} (${response.status})`);
-    }
-    const text = (await response.text()).trim();
-    PROMPT_CACHE.set(key, text);
-    return text;
-}
-
-
-
-/**
- * 封装的 OpenAI API 调用函数 - 用于生成 WoS 查询语句
- */
-
-async function _wos_query_parse(text) {
-    const basePrompt = await _loadPrompt('wosQuery');
-    const systemPrompt = `${basePrompt}
-
-Additional output rules:
-1. Return JSON only. Do not return markdown, code fences, or explanation text.
-2. The JSON shape must be {"wos_query":[{"rowText":"..."}]}.
-3. If rowText contains an OG=(...) segment, replace the standalone word "and" inside the parentheses with "&".
-4. Do not change "and" outside OG=(...).`;
-    return {
-        "model": window.openai_chat_model || "gpt-4o-mini",
-        'input': [
-            {
-                'role': 'system',
-                'content': [
-                    {
-                        'type': 'input_text',
-                        "text": systemPrompt
-
-                    }
-                ]
-            },
-            {
-                'role': 'user',
-                'content': [
-                    {
-                        'type': 'input_text',
-                        'text': `${text}`
-                    }
-                ]
-            },
-        ],
-        'text': {
-            'format': {
-                'type': 'text'
-            }
-        },
-        "tools": [],
-        "temperature": 0,
-        "max_output_tokens": 1024,
-        "top_p": 1,
-        "store": false,
-    }
-}
-/**
- * 封装的 OpenAI API 调用函数
- * @param {Object} jsonData - 要发送的 JSON 数据
- * @returns {Object} - API 响应数据
- * jsonData 示例:
- * await _wos_query_parse()
- */
-async function callOpenAI(jsonData) {
-    try {
-        const response = await fetch('https://api.openai.com/v1/responses', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${window.openai_api_key}`
-            },
-            body: JSON.stringify(jsonData)
-        });
-        // 检查响应是否成功
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API Error: ${response.status} - ${errorText}`);
-        }
-
-        // 尝试解析 JSON
-        const data = await response.json();
-        if (data?.error) {
-            throw new Error(`API Error: ${data.error.message || 'Unknown error'}`);
-        }
-        return data;
-    } catch (error) {
-        console.error('Error calling OpenAI API:', error);
-        throw error;
-    }
-}
-
 function normalizeOgAndOperators(rowText) {
     return String(rowText || '').replace(/OG=\(([^)]*)\)/gi, (_match, inner) => {
         const normalizedInner = inner
@@ -196,33 +61,36 @@ function extractResponseText(result) {
 
 // 使用示例
 async function openai_api_chat_query(text = '') {
-    let jsonData;
-    try {
-        jsonData = await _wos_query_parse(text);
-    } catch (e) {
-        console.error('[OpenAI Chat] Failed to load WoS prompt:', e);
-        return null;
-    }
-    const result = await callOpenAI(jsonData);
-    if (result) {
-        try {
-            const rawText = extractResponseText(result);
-            const rowText = extractNormalizedRowText(rawText);
-            if (rowText) {
-                const queryJson = encodeURIComponent(JSON.stringify([{ rowText }]));
-                const queryUrl = `/wos/woscc/general-summary?queryJson=${queryJson}`;
-                console.log('[OpenAI Chat] query result:', rowText);
-                console.log('[OpenAI Chat] query url:', queryUrl);
-                await wos.query(rowText);
-            } else {
-                console.warn('[OpenAI Chat] missing rowText from response:', parsedResult);
+    const requestId = `wosaide-openai-chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const response = await new Promise((resolve) => {
+        const handler = (event) => {
+            if (event?.detail?.requestId !== requestId) {
+                return;
             }
-        } catch (e) {
-            console.error('Failed to parse JSON:', e);
-        }
-    } else {
-        console.log('Failed to get valid response');
+            document.removeEventListener("__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__", handler);
+            resolve(event.detail);
+        };
+        document.addEventListener("__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__", handler);
+        document.dispatchEvent(new CustomEvent("__WOS_AIDE_GENERATE_WOS_QUERY_REQUEST__", {
+            detail: {
+                requestId,
+                text,
+                provider: "openai"
+            }
+        }));
+        setTimeout(() => {
+            document.removeEventListener("__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__", handler);
+            resolve({ success: false, error: 'Request timed out.' });
+        }, 15000);
+    });
+
+    if (!response?.success || !response?.rowText) {
+        throw new Error(response?.error || 'Failed to get valid response');
     }
+
+    const rowText = normalizeOgAndOperators(response.rowText);
+    console.log('[OpenAI Chat] query result:', rowText);
+    await wos.query(rowText);
     return null;
 }
 
@@ -278,107 +146,14 @@ window.openai_api_chat_query = openai_api_chat_query;
     const POSITION_LEFT_KEY = "wos-openai-panel-left";
     const WIDTH_KEY = "wos-openai-panel-width";
     const VISIBILITY_KEY = "wos-openai-panel-visible";
-    const API_KEY_STORAGE = "wos-openai-api-key";
-    const API_KEY_REQUEST_EVENT = "__ENLIGHTENKEY_CHAT_API_KEY_REQUEST__";
-    const API_KEY_RESPONSE_EVENT = "__ENLIGHTENKEY_CHAT_API_KEY_RESPONSE__";
-    const API_KEY_UPDATE_EVENT = "__ENLIGHTENKEY_CHAT_API_KEY_UPDATE__";
-    const API_KEY_SYNC_EVENT = "__ENLIGHTENKEY_CHAT_API_KEY_SYNC__";
-    const MODEL_REQUEST_EVENT = "__ENLIGHTENKEY_CHAT_MODEL_REQUEST__";
-    const MODEL_RESPONSE_EVENT = "__ENLIGHTENKEY_CHAT_MODEL_RESPONSE__";
-    const MODEL_UPDATE_EVENT = "__ENLIGHTENKEY_CHAT_MODEL_UPDATE__";
-    const MODEL_SYNC_EVENT = "__ENLIGHTENKEY_CHAT_MODEL_SYNC__";
     const VISIBILITY_EVENT = "__OPENAI_CHAT_VISIBILITY__";
-    const FONT_AWESOME_ID = "enlightenkey-fontawesome";
+    const FONT_AWESOME_ID = "wosAide-fontawesome";
     const FONT_AWESOME_FALLBACK = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css";
 
     const savedTop = localStorage.getItem(POSITION_TOP_KEY) || "100px";
     const savedLeft = localStorage.getItem(POSITION_LEFT_KEY) || null;
     const savedWidth = localStorage.getItem(WIDTH_KEY) || "500px";
     const savedVisible = localStorage.getItem(VISIBILITY_KEY);
-
-    const requestApiKeyFromChromeStorage = () => new Promise((resolve) => {
-        const requestId = `chat-api-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        let settled = false;
-
-        const handler = (event) => {
-            if (!event?.detail || event.detail.requestId !== requestId) {
-                return;
-            }
-            settled = true;
-            document.removeEventListener(API_KEY_RESPONSE_EVENT, handler);
-            resolve(event.detail.apiKey || "");
-        };
-
-        document.addEventListener(API_KEY_RESPONSE_EVENT, handler);
-        document.dispatchEvent(new CustomEvent(API_KEY_REQUEST_EVENT, {
-            detail: { requestId }
-        }));
-
-        setTimeout(() => {
-            if (!settled) {
-                document.removeEventListener(API_KEY_RESPONSE_EVENT, handler);
-                resolve("");
-            }
-        }, 1200);
-    });
-
-    const persistApiKeyToChromeStorage = (apiKey) => {
-        document.dispatchEvent(new CustomEvent(API_KEY_UPDATE_EVENT, {
-            detail: { apiKey: apiKey || "" }
-        }));
-    };
-
-    const requestModelFromChromeStorage = () => new Promise((resolve) => {
-        const requestId = `chat-model-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        let settled = false;
-
-        const handler = (event) => {
-            if (!event?.detail || event.detail.requestId !== requestId) {
-                return;
-            }
-            settled = true;
-            document.removeEventListener(MODEL_RESPONSE_EVENT, handler);
-            resolve(event.detail.model || "gpt-4o-mini");
-        };
-
-        document.addEventListener(MODEL_RESPONSE_EVENT, handler);
-        document.dispatchEvent(new CustomEvent(MODEL_REQUEST_EVENT, {
-            detail: { requestId }
-        }));
-
-        setTimeout(() => {
-            if (!settled) {
-                document.removeEventListener(MODEL_RESPONSE_EVENT, handler);
-                resolve("gpt-4o-mini");
-            }
-        }, 1200);
-    });
-
-    const persistModelToChromeStorage = (model) => {
-        document.dispatchEvent(new CustomEvent(MODEL_UPDATE_EVENT, {
-            detail: { model: model || "gpt-4o-mini" }
-        }));
-    };
-
-    const loadApiKey = async () => {
-        const chromeApiKey = await requestApiKeyFromChromeStorage();
-        if (chromeApiKey) {
-            return chromeApiKey;
-        }
-
-        const legacyApiKey = localStorage.getItem(API_KEY_STORAGE) || "";
-        if (legacyApiKey) {
-            persistApiKeyToChromeStorage(legacyApiKey);
-        }
-        return legacyApiKey;
-    };
-
-    const savedApiKey = await loadApiKey();
-    const savedModel = await requestModelFromChromeStorage();
-
-    // Initialize global variables
-    window.openai_api_key = savedApiKey;
-    window.openai_chat_model = savedModel || "gpt-4o-mini";
 
     const resolveExtensionUrl = (relativePath) => {
         const currentScript = document.currentScript;
@@ -435,7 +210,7 @@ window.openai_api_chat_query = openai_api_chat_query;
         box.style.right = "10px";
     }
     box.style.zIndex = "999999";
-    box.style.fontFamily = window.ENLIGHTENKEY_FONT_FAMILY || 'Arial, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif';
+    box.style.fontFamily = window.WOS_AIDE_FONT_FAMILY || 'Arial, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", sans-serif';
     box.style.background = "rgba(0,0,0,0.85)";
     box.style.padding = "0";
     box.style.borderRadius = "8px";
@@ -678,15 +453,5 @@ window.openai_api_chat_query = openai_api_chat_query;
     };
 
     document.addEventListener(VISIBILITY_EVENT, visibilityHandler);
-
-    document.addEventListener(API_KEY_SYNC_EVENT, (event) => {
-        const apiKey = event?.detail?.apiKey || "";
-        window.openai_api_key = apiKey;
-    });
-
-    document.addEventListener(MODEL_SYNC_EVENT, (event) => {
-        const model = event?.detail?.model || "gpt-4.1-nano";
-        window.openai_chat_model = model;
-    });
 
 })();
