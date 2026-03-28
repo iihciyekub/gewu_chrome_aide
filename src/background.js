@@ -17,7 +17,12 @@ const LM_STUDIO_BASE_URL_STORAGE_KEY = 'wosLmStudioBaseUrl';
 const LM_STUDIO_MODEL_STORAGE_KEY = 'wosLmStudioModel';
 const LM_STUDIO_API_KEY_STORAGE_KEY = 'wosLmStudioApiKey';
 const EASYSCHOLAR_API_KEY_STORAGE_KEY = 'wos-easyscholar-api-key';
-const WOS_URL_RE = /^https?:\/\/([^/]+\.)?(webofscience|webofknowledge|isiknowledge)\.com\/|^https?:\/\/([^/]+\.)?clarivate\.com\//i;
+const OPENAI_HOST_ORIGINS = ['https://api.openai.com/*'];
+const EASYSCHOLAR_HOST_ORIGINS = ['https://www.easyscholar.cc/*'];
+const LM_STUDIO_HOST_ORIGIN_MAP = {
+  'http://127.0.0.1': 'http://127.0.0.1/*',
+  'http://localhost': 'http://localhost/*'
+};
 
 const easyscholarMapping = {
   swufe: '西南财经大学',
@@ -67,29 +72,28 @@ const getStorage = (keys) => new Promise((resolve) => {
   chrome.storage.local.get(keys, result => resolve(result || {}));
 });
 
-const isWosUrl = (url) => WOS_URL_RE.test(url || '');
-
-const ensureWosContentScript = async (tabId) => {
-  if (!tabId) {
+const containsOriginPermissions = (origins) => new Promise((resolve) => {
+  if (!chrome.permissions?.contains || !Array.isArray(origins) || !origins.length) {
+    resolve(false);
     return;
   }
-
-  try {
-    const response = await chrome.tabs.sendMessage(tabId, { type: 'PING_WOS_AIDE' });
-    if (response?.success) {
+  chrome.permissions.contains({ origins }, (granted) => {
+    if (chrome.runtime.lastError) {
+      resolve(false);
       return;
     }
-  } catch (_error) {
-    // Fall through to executeScript when there is no receiving end yet.
-  }
+    resolve(Boolean(granted));
+  });
+});
 
+const getLmStudioPermissionOrigins = (baseUrl) => {
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['contentScript.js']
-    });
+    const parsed = new URL((baseUrl || 'http://127.0.0.1:1234/v1').trim() || 'http://127.0.0.1:1234/v1');
+    const normalizedOrigin = `${parsed.protocol}//${parsed.hostname}`.toLowerCase();
+    const matchPattern = LM_STUDIO_HOST_ORIGIN_MAP[normalizedOrigin];
+    return matchPattern ? [matchPattern] : [];
   } catch (_error) {
-    // Ignore reinjection failures on restricted/transition pages.
+    return [];
   }
 };
 
@@ -185,6 +189,10 @@ Additional output rules:
 }
 
 async function callOpenAI(apiKey, jsonData) {
+  const hasPermission = await containsOriginPermissions(OPENAI_HOST_ORIGINS);
+  if (!hasPermission) {
+    throw new Error('OpenAI host access is not granted. Open the popup and enable or test OpenAI first.');
+  }
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
@@ -201,6 +209,13 @@ async function callOpenAI(apiKey, jsonData) {
 
 async function callLmStudio(baseUrl, apiKey, payload) {
   const normalizedBaseUrl = (baseUrl || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
+  const origins = getLmStudioPermissionOrigins(normalizedBaseUrl);
+  if (!origins.length) {
+    throw new Error('LM Studio host must use localhost or 127.0.0.1 over http.');
+  }
+  if (!await containsOriginPermissions(origins)) {
+    throw new Error('LM Studio host access is not granted. Open the popup and enable or test LM Studio first.');
+  }
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`;
@@ -281,6 +296,10 @@ async function fetchEasyScholarRank(publicationName) {
   if (!apiKey) {
     throw new Error('EasyScholar API key missing. Please set it in popup.');
   }
+  const hasPermission = await containsOriginPermissions(EASYSCHOLAR_HOST_ORIGINS);
+  if (!hasPermission) {
+    throw new Error('EasyScholar host access is not granted. Open the popup and enable or test EasyScholar first.');
+  }
 
   const url = `https://www.easyscholar.cc/open/getPublicationRank?secretKey=${encodeURIComponent(apiKey)}&publicationName=${encodeURIComponent(publicationName)}`;
   const response = await fetch(url);
@@ -344,16 +363,6 @@ async function readFileContent(fileHandle) {
     throw error;
   }
 }
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status !== 'complete') {
-    return;
-  }
-  if (!isWosUrl(tab?.url || '')) {
-    return;
-  }
-  ensureWosContentScript(tabId);
-});
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'ENSURE_FONT_AWESOME') {

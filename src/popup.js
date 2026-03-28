@@ -22,6 +22,12 @@ import './popup.css';
 
   // ========== Status Management ==========
   const statusClasses = ['status--success', 'status--error', 'status--info', 'status--muted'];
+  const OPENAI_HOST_ORIGINS = ['https://api.openai.com/*'];
+  const EASYSCHOLAR_HOST_ORIGINS = ['https://www.easyscholar.cc/*'];
+  const LM_STUDIO_HOST_ORIGIN_MAP = {
+    'http://127.0.0.1': 'http://127.0.0.1/*',
+    'http://localhost': 'http://localhost/*'
+  };
 
   const setStatus = (element, message, variant) => {
     if (!element) {
@@ -31,6 +37,45 @@ import './popup.css';
     element.classList.remove(...statusClasses);
     if (variant) {
       element.classList.add(variant);
+    }
+  };
+
+  const containsOriginPermissions = (origins) => new Promise((resolve) => {
+    if (!chrome.permissions?.contains || !Array.isArray(origins) || !origins.length) {
+      resolve(false);
+      return;
+    }
+    chrome.permissions.contains({ origins }, (granted) => {
+      if (chrome.runtime.lastError) {
+        resolve(false);
+        return;
+      }
+      resolve(Boolean(granted));
+    });
+  });
+
+  const requestOriginPermissions = (origins) => new Promise((resolve) => {
+    if (!chrome.permissions?.request || !Array.isArray(origins) || !origins.length) {
+      resolve(false);
+      return;
+    }
+    chrome.permissions.request({ origins }, (granted) => {
+      if (chrome.runtime.lastError) {
+        resolve(false);
+        return;
+      }
+      resolve(Boolean(granted));
+    });
+  });
+
+  const getLmStudioPermissionOrigins = (rawBaseUrl) => {
+    try {
+      const parsed = new URL((rawBaseUrl || 'http://127.0.0.1:1234/v1').trim() || 'http://127.0.0.1:1234/v1');
+      const normalizedOrigin = `${parsed.protocol}//${parsed.hostname}`.toLowerCase();
+      const matchPattern = LM_STUDIO_HOST_ORIGIN_MAP[normalizedOrigin];
+      return matchPattern ? [matchPattern] : [];
+    } catch (_error) {
+      return [];
     }
   };
 
@@ -429,6 +474,9 @@ import './popup.css';
         setStatus(sidDisplay, 'EasyScholar key missing', 'status--error');
         return false;
       }
+      if (!await ensureEasyScholarHostPermission()) {
+        return false;
+      }
 
       updateEasyScholarApiKeyHint('Testing EasyScholar API key...', 'status--info');
       setStatus(sidDisplay, 'Testing EasyScholar key...', 'status--info');
@@ -527,7 +575,11 @@ import './popup.css';
     }
 
     if (easyScholarEnabledToggle) {
-      easyScholarEnabledToggle.addEventListener('change', () => {
+      easyScholarEnabledToggle.addEventListener('change', async () => {
+        if (easyScholarEnabledToggle.checked && !await ensureEasyScholarHostPermission()) {
+          easyScholarEnabledToggle.checked = false;
+          return;
+        }
         saveEasyScholarEnabled(easyScholarEnabledToggle.checked);
       });
     }
@@ -557,6 +609,48 @@ import './popup.css';
       if (variant) {
         lmStudioHint.classList.add(variant);
       }
+    };
+
+    const ensureOpenAIHostPermission = async () => {
+      if (await containsOriginPermissions(OPENAI_HOST_ORIGINS)) {
+        return true;
+      }
+      const granted = await requestOriginPermissions(OPENAI_HOST_ORIGINS);
+      if (!granted) {
+        updateChatModelHint('OpenAI host access was not granted.', 'status--error');
+        setStatus(sidDisplay, 'OpenAI host access denied', 'status--error');
+      }
+      return granted;
+    };
+
+    const ensureEasyScholarHostPermission = async () => {
+      if (await containsOriginPermissions(EASYSCHOLAR_HOST_ORIGINS)) {
+        return true;
+      }
+      const granted = await requestOriginPermissions(EASYSCHOLAR_HOST_ORIGINS);
+      if (!granted) {
+        updateEasyScholarApiKeyHint('EasyScholar host access was not granted.', 'status--error');
+        setStatus(sidDisplay, 'EasyScholar host access denied', 'status--error');
+      }
+      return granted;
+    };
+
+    const ensureLmStudioHostPermission = async () => {
+      const origins = getLmStudioPermissionOrigins(lmStudioBaseUrlInput?.value || '');
+      if (!origins.length) {
+        updateLmStudioHint('LM Studio host must use localhost or 127.0.0.1 over http.', 'status--error');
+        setStatus(sidDisplay, 'Unsupported LM Studio host', 'status--error');
+        return false;
+      }
+      if (await containsOriginPermissions(origins)) {
+        return true;
+      }
+      const granted = await requestOriginPermissions(origins);
+      if (!granted) {
+        updateLmStudioHint('LM Studio host access was not granted.', 'status--error');
+        setStatus(sidDisplay, 'LM Studio host access denied', 'status--error');
+      }
+      return granted;
     };
 
     const getCurrentProviderVerified = () => (
@@ -795,6 +889,9 @@ import './popup.css';
       const baseUrl = ((lmStudioBaseUrlInput?.value || '').trim() || 'http://127.0.0.1:1234/v1');
       const apiKey = (lmStudioApiKeyInput?.value || '').trim();
       const endpoint = getLmStudioModelsEndpoint(baseUrl);
+      if (!await ensureLmStudioHostPermission()) {
+        return [];
+      }
 
       updateLmStudioHint('Fetching LM Studio model list...', 'status--info');
       setStatus(sidDisplay, 'Fetching LM Studio model list...', 'status--info');
@@ -866,6 +963,9 @@ import './popup.css';
       if (!model) {
         updateLmStudioHint('Enter an LM Studio model id first.', 'status--error');
         setStatus(sidDisplay, 'LM Studio model missing', 'status--error');
+        return false;
+      }
+      if (!await ensureLmStudioHostPermission()) {
         return false;
       }
 
@@ -966,6 +1066,9 @@ import './popup.css';
       if (!apiKey) {
         updateChatModelHint('Enter and save an OpenAI API key first.', 'status--error');
         setStatus(sidDisplay, 'OpenAI API key missing', 'status--error');
+        return [];
+      }
+      if (!await ensureOpenAIHostPermission()) {
         return [];
       }
 
@@ -1080,13 +1183,36 @@ import './popup.css';
         updateProviderVisibility();
       });
       wosQueryProviderSelect.addEventListener('change', () => {
-        saveWosQueryProvider(wosQueryProviderSelect.value);
+        const nextProvider = wosQueryProviderSelect.value;
+        (async () => {
+          if (currentWosQueryEnabled) {
+            const granted = nextProvider === 'lmstudio'
+              ? await ensureLmStudioHostPermission()
+              : await ensureOpenAIHostPermission();
+            if (!granted) {
+              wosQueryProviderSelect.value = currentWosQueryProvider;
+              return;
+            }
+          }
+          saveWosQueryProvider(nextProvider);
+        })();
       });
     }
 
     if (wosQueryProviderEnabledToggle) {
       wosQueryProviderEnabledToggle.addEventListener('change', () => {
-        saveWosQueryEnabled(wosQueryProviderEnabledToggle.checked);
+        (async () => {
+          if (wosQueryProviderEnabledToggle.checked) {
+            const granted = currentWosQueryProvider === 'lmstudio'
+              ? await ensureLmStudioHostPermission()
+              : await ensureOpenAIHostPermission();
+            if (!granted) {
+              wosQueryProviderEnabledToggle.checked = false;
+              return;
+            }
+          }
+          saveWosQueryEnabled(wosQueryProviderEnabledToggle.checked);
+        })();
       });
     }
 
@@ -1159,6 +1285,9 @@ import './popup.css';
           if (!model) {
             updateChatModelHint('Model missing.', 'status--error');
             setStatus(sidDisplay, 'Model missing', 'status--error');
+            return;
+          }
+          if (!await ensureOpenAIHostPermission()) {
             return;
           }
 

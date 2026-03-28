@@ -1,4 +1,4 @@
-const isWosPage = () => /(^|\.)((webofscience|webofknowledge|isiknowledge)\.com|clarivate\.com)$/i.test(window.location.hostname || '');
+const isWosPage = () => /(^|\.)webofscience\.com$/i.test(window.location.hostname || '');
 const isChatGptPage = () => /(^|\.)chatgpt\.com$/i.test(window.location.hostname || '');
 const isSameWindowMessage = (event) => event?.source === window;
 const allowStorageBridge = () => isWosPage() || isChatGptPage();

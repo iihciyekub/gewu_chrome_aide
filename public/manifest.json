@@ -21,10 +21,9 @@
     "storage",
     "clipboardWrite",
     "activeTab",
-    "scripting",
-    "tabs"
+    "scripting"
   ],
-  "host_permissions": [
+  "optional_host_permissions": [
     "https://api.openai.com/*",
     "https://www.easyscholar.cc/*",
     "http://127.0.0.1/*",
@@ -33,14 +32,8 @@
   "content_scripts": [
     {
       "matches": [
-        "*://www.webofscience.com/*",
-        "*://*.webofscience.com/*",
-        "*://www.webofknowledge.com/*",
-        "*://*.webofknowledge.com/*",
-        "*://www.isiknowledge.com/*",
-        "*://*.isiknowledge.com/*",
-        "*://www.clarivate.com/*",
-        "*://*.clarivate.com/*"
+        "https://www.webofscience.com/*",
+        "https://*.webofscience.com/*"
       ],
       "run_at": "document_idle",
       "js": [
@@ -59,14 +52,8 @@
     },
     {
       "matches": [
-        "*://www.webofscience.com/*",
-        "*://*.webofscience.com/*",
-        "*://www.webofknowledge.com/*",
-        "*://*.webofknowledge.com/*",
-        "*://www.isiknowledge.com/*",
-        "*://*.isiknowledge.com/*",
-        "*://www.clarivate.com/*",
-        "*://*.clarivate.com/*"
+        "https://www.webofscience.com/*",
+        "https://*.webofscience.com/*"
       ],
       "run_at": "document_start",
       "js": [
@@ -92,14 +79,8 @@
         "webfonts/*.ttf"
       ],
       "matches": [
-        "*://www.webofscience.com/*",
-        "*://*.webofscience.com/*",
-        "*://www.webofknowledge.com/*",
-        "*://*.webofknowledge.com/*",
-        "*://www.isiknowledge.com/*",
-        "*://*.isiknowledge.com/*",
-        "*://www.clarivate.com/*",
-        "*://*.clarivate.com/*"
+        "https://www.webofscience.com/*",
+        "https://*.webofscience.com/*"
       ]
     },
     {
@@ -121,7 +102,6 @@
         "webfonts/*.ttf"
       ],
       "matches": [
-        "http://*/*",
         "https://*/*"
       ]
     }
