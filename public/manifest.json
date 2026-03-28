@@ -21,7 +21,8 @@
     "storage",
     "clipboardWrite",
     "activeTab",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "https://api.openai.com/*",
@@ -33,7 +34,13 @@
     {
       "matches": [
         "*://www.webofscience.com/*",
-        "*://*.webofscience.com/*"
+        "*://*.webofscience.com/*",
+        "*://www.webofknowledge.com/*",
+        "*://*.webofknowledge.com/*",
+        "*://www.isiknowledge.com/*",
+        "*://*.isiknowledge.com/*",
+        "*://www.clarivate.com/*",
+        "*://*.clarivate.com/*"
       ],
       "run_at": "document_idle",
       "js": [
@@ -53,7 +60,13 @@
     {
       "matches": [
         "*://www.webofscience.com/*",
-        "*://*.webofscience.com/*"
+        "*://*.webofscience.com/*",
+        "*://www.webofknowledge.com/*",
+        "*://*.webofknowledge.com/*",
+        "*://www.isiknowledge.com/*",
+        "*://*.isiknowledge.com/*",
+        "*://www.clarivate.com/*",
+        "*://*.clarivate.com/*"
       ],
       "run_at": "document_start",
       "js": [
@@ -80,7 +93,13 @@
       ],
       "matches": [
         "*://www.webofscience.com/*",
-        "*://*.webofscience.com/*"
+        "*://*.webofscience.com/*",
+        "*://www.webofknowledge.com/*",
+        "*://*.webofknowledge.com/*",
+        "*://www.isiknowledge.com/*",
+        "*://*.isiknowledge.com/*",
+        "*://www.clarivate.com/*",
+        "*://*.clarivate.com/*"
       ]
     },
     {

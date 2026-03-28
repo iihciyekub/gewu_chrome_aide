@@ -1,4 +1,4 @@
-const isWosPage = () => /(^|\.)webofscience\.com$/i.test(window.location.hostname || '');
+const isWosPage = () => /(^|\.)((webofscience|webofknowledge|isiknowledge)\.com|clarivate\.com)$/i.test(window.location.hostname || '');
 const isChatGptPage = () => /(^|\.)chatgpt\.com$/i.test(window.location.hostname || '');
 const isSameWindowMessage = (event) => event?.source === window;
 const allowStorageBridge = () => isWosPage() || isChatGptPage();
@@ -171,6 +171,32 @@ const GENERATE_WOS_QUERY_REQUEST_EVENT = '__WOS_AIDE_GENERATE_WOS_QUERY_REQUEST_
 const GENERATE_WOS_QUERY_RESPONSE_EVENT = '__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__';
 const FETCH_EASYSCHOLAR_RANK_REQUEST_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_REQUEST__';
 const FETCH_EASYSCHOLAR_RANK_RESPONSE_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_RESPONSE__';
+const WOS_TOOLBAR_SHORTCUTS_ID = 'wos-aide-toolbar-shortcuts';
+const WOS_TOOLBAR_SHORTCUTS_STYLE_ID = 'wos-aide-toolbar-shortcuts-style';
+const WOS_DOI_QUERY_PANEL_MODE_EVENT = '__WOS_DOI_QUERY_PANEL_MODE__';
+const WOS_DOI_QUERY_PANEL_STATE_EVENT = '__WOS_DOI_QUERY_PANEL_STATE__';
+const getCurrentWosDoiQueryPanelState = () => {
+  const element = document.getElementById(MODULES.wosDoiQuery.elementId);
+  if (!element || element.style.display === 'none' || element.hidden) {
+    return { visible: false, mode: 'batch', tab: '' };
+  }
+
+  let panelState = { visible: true, mode: 'batch', tab: '' };
+  const handler = (event) => {
+    panelState = {
+      visible: true,
+      mode: event?.detail?.mode || 'batch',
+      tab: event?.detail?.tab || ''
+    };
+  };
+
+  document.addEventListener(WOS_DOI_QUERY_PANEL_STATE_EVENT, handler, { once: true });
+  document.dispatchEvent(new CustomEvent(WOS_DOI_QUERY_PANEL_STATE_EVENT, {
+    detail: { requestState: true }
+  }));
+  document.removeEventListener(WOS_DOI_QUERY_PANEL_STATE_EVENT, handler);
+  return panelState;
+};
 
 /**
  * 确保 module-bridge 已加载
@@ -333,6 +359,39 @@ const getModuleState = (moduleId) => {
   return { exists: true, visible: !isHidden };
 };
 
+const openWosDoiQueryPanel = (preferredTab, presentation = 'batch', anchorRect = null) => {
+  const element = document.getElementById(MODULES.wosDoiQuery.elementId);
+  const switchTab = () => {
+    document.dispatchEvent(new CustomEvent(WOS_DOI_QUERY_PANEL_MODE_EVENT, {
+      detail: { mode: presentation, tab: preferredTab || 'query', anchorRect }
+    }));
+    if (!preferredTab) {
+      return;
+    }
+    document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
+      detail: { tab: preferredTab }
+    }));
+  };
+
+  const showPanel = () => {
+    setModuleVisibility('wosDoiQuery', true);
+    if (preferredTab === 'journal') {
+      setModuleVisibility('easyscholar', true);
+    }
+    switchTab();
+  };
+
+  if (element) {
+    element.style.display = 'flex';
+    showPanel();
+    return { success: true, visible: true, action: 'shown' };
+  }
+
+  injectModule('wosDoiQuery');
+  setTimeout(showPanel, 100);
+  return { success: true, visible: true, action: 'injected' };
+};
+
 const toggleWosDoiQueryPanel = (preferredTab) => {
   const element = document.getElementById(MODULES.wosDoiQuery.elementId);
   const switchTab = () => {
@@ -362,10 +421,286 @@ const toggleWosDoiQueryPanel = (preferredTab) => {
   return { success: true, visible: true, action: 'injected' };
 };
 
+const ensureWosToolbarShortcutsStyle = () => {
+  if (document.getElementById(WOS_TOOLBAR_SHORTCUTS_STYLE_ID)) {
+    return;
+  }
+  const style = document.createElement('style');
+  style.id = WOS_TOOLBAR_SHORTCUTS_STYLE_ID;
+  style.textContent = `
+#${WOS_TOOLBAR_SHORTCUTS_ID} {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+}
+#${WOS_TOOLBAR_SHORTCUTS_ID}[data-floating-fallback="true"] {
+  position: fixed;
+  top: 180px;
+  left: 12px;
+  width: 42px;
+  margin-top: 0;
+  z-index: 999998;
+  padding: 6px 0;
+}
+#${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn {
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #4a3b88;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: none;
+  transition: transform 0.14s ease, color 0.14s ease, opacity 0.14s ease;
+  padding: 0;
+  appearance: none;
+}
+#${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn:hover {
+  transform: translateY(-1px);
+  opacity: 0.82;
+}
+#${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-btn:focus-visible {
+  outline: 2px solid rgba(100, 92, 171, 0.22);
+  outline-offset: 2px;
+}
+#${WOS_TOOLBAR_SHORTCUTS_ID} .wos-aide-toolbar-icon {
+  font-size: 24px;
+  line-height: 1;
+  display: inline-block;
+  pointer-events: none;
+}
+`;
+  (document.head || document.documentElement).appendChild(style);
+};
+
+const ensureWosToolbarShortcuts = () => {
+  if (!isWosPage()) {
+    return;
+  }
+
+  const toolbar = document.querySelector('.top-left-panel.ng-star-inserted') || document.querySelector('.top-left-panel');
+  const alertsButton = document.querySelector('[data-pendo-menu-alerts]');
+  ensureWosToolbarShortcutsStyle();
+
+  const existing = document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID);
+  if (existing) {
+    if (toolbar) {
+      const existingParent = existing.parentElement;
+      const anchorParent = alertsButton?.parentElement || null;
+      existing.dataset.floatingFallback = 'false';
+      if (existingParent !== toolbar || (alertsButton && existing.previousElementSibling !== alertsButton)) {
+        if (alertsButton && anchorParent === toolbar) {
+          alertsButton.insertAdjacentElement('afterend', existing);
+        } else {
+          toolbar.insertAdjacentElement('beforeend', existing);
+        }
+      }
+    } else {
+      existing.dataset.floatingFallback = 'true';
+      if (existing.parentElement !== document.body) {
+        document.body.appendChild(existing);
+      }
+    }
+    return;
+  }
+
+  const shortcutsWrap = document.createElement('div');
+  shortcutsWrap.id = WOS_TOOLBAR_SHORTCUTS_ID;
+
+  const buttons = [
+    {
+      id: 'doi-query',
+      title: 'DOI Query',
+      iconHtml: '<i class="fa-solid fa-magnifying-glass wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      preferredTab: 'query'
+    },
+    {
+      id: 'wos-export',
+      title: 'WOS Data Export',
+      iconHtml: '<i class="fa-regular fa-circle-down wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      preferredTab: 'export'
+    },
+    {
+      id: 'journal-query',
+      title: 'Journal Query',
+      iconHtml: '<i class="fa-regular fa-newspaper wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      preferredTab: 'journal'
+    },
+    {
+      id: 'wos-query',
+      title: 'WOS Query',
+      iconHtml: '<i class="fa-regular fa-comment-dots wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      preferredTab: 'builder'
+    }
+  ];
+
+  buttons.forEach(({ id, title, iconHtml, preferredTab }) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wos-aide-toolbar-btn';
+    button.dataset.wosAideShortcut = id;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.innerHTML = iconHtml;
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const currentState = getCurrentWosDoiQueryPanelState();
+      if (currentState.visible && currentState.mode === 'single' && currentState.tab === preferredTab) {
+        const panelElement = document.getElementById(MODULES.wosDoiQuery.elementId);
+        if (panelElement) {
+          panelElement.style.display = 'none';
+          setModuleVisibility('wosDoiQuery', false);
+        }
+        return;
+      }
+      const rect = button.getBoundingClientRect();
+      openWosDoiQueryPanel(preferredTab, 'single', {
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height
+      });
+    });
+    shortcutsWrap.appendChild(button);
+  });
+
+  if (toolbar) {
+    shortcutsWrap.dataset.floatingFallback = 'false';
+    const anchorParent = alertsButton?.parentElement || null;
+    if (alertsButton && anchorParent === toolbar) {
+      alertsButton.insertAdjacentElement('afterend', shortcutsWrap);
+    } else {
+      toolbar.insertAdjacentElement('beforeend', shortcutsWrap);
+    }
+  } else {
+    shortcutsWrap.dataset.floatingFallback = 'true';
+    (document.body || document.documentElement).appendChild(shortcutsWrap);
+  }
+};
+
+let wosToolbarBootstrapStarted = false;
+let wosToolbarRetryTimer = null;
+let wosToolbarAnimationFrameId = null;
+let wosToolbarHeartbeatTimer = null;
+
+const scheduleWosToolbarShortcutMount = (attempt = 0) => {
+  if (!isWosPage()) {
+    return;
+  }
+
+  ensureWosToolbarShortcuts();
+  if (document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID)) {
+    return;
+  }
+
+  if (attempt >= 20) {
+    return;
+  }
+
+  if (wosToolbarRetryTimer) {
+    clearTimeout(wosToolbarRetryTimer);
+  }
+
+  const delay = attempt < 5 ? 120 : 300;
+  wosToolbarRetryTimer = setTimeout(() => {
+    scheduleWosToolbarShortcutMount(attempt + 1);
+  }, delay);
+};
+
+const pollWosToolbarShortcutMount = (frameCount = 0) => {
+  if (!isWosPage()) {
+    return;
+  }
+
+  ensureWosToolbarShortcuts();
+  if (document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID)) {
+    wosToolbarAnimationFrameId = null;
+    return;
+  }
+
+  if (frameCount >= 180) {
+    wosToolbarAnimationFrameId = null;
+    return;
+  }
+
+  wosToolbarAnimationFrameId = window.requestAnimationFrame(() => {
+    pollWosToolbarShortcutMount(frameCount + 1);
+  });
+};
+
+const bootstrapWosToolbarShortcuts = () => {
+  if (!isWosPage() || wosToolbarBootstrapStarted) {
+    return;
+  }
+  wosToolbarBootstrapStarted = true;
+
+  scheduleWosToolbarShortcutMount(0);
+  pollWosToolbarShortcutMount(0);
+
+  const toolbarObserver = new MutationObserver(() => {
+    ensureWosToolbarShortcuts();
+  });
+
+  const observeTarget = document.body || document.documentElement;
+  if (observeTarget) {
+    toolbarObserver.observe(observeTarget, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
+  }
+
+  window.addEventListener('load', () => {
+    scheduleWosToolbarShortcutMount(0);
+    pollWosToolbarShortcutMount(0);
+  });
+
+  window.addEventListener('pageshow', () => {
+    scheduleWosToolbarShortcutMount(0);
+    pollWosToolbarShortcutMount(0);
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+    scheduleWosToolbarShortcutMount(0);
+    pollWosToolbarShortcutMount(0);
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      scheduleWosToolbarShortcutMount(0);
+      pollWosToolbarShortcutMount(0);
+    }
+  });
+
+  if (wosToolbarHeartbeatTimer) {
+    clearInterval(wosToolbarHeartbeatTimer);
+  }
+
+  wosToolbarHeartbeatTimer = window.setInterval(() => {
+    if (!isWosPage() || document.hidden) {
+      return;
+    }
+    ensureWosToolbarShortcuts();
+  }, 1500);
+};
+
 // ========== 消息监听 ==========
 
 // Listen for message
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'PING_WOS_AIDE') {
+    sendResponse({ success: true });
+    return true;
+  }
+
   // EasyScholar 相关消息
   if (request.type === 'GET_EASYSCHOLAR_PANEL_STATE') {
     const state = getModuleState('easyscholar');
@@ -377,29 +712,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!requireWosPage(sendResponse, 'EasyScholar')) {
       return true;
     }
-    const element = document.getElementById(MODULES.wosDoiQuery.elementId);
-    const switchToJournalTab = () => {
-      document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
-        detail: { tab: 'journal' }
-      }));
-    };
-
-    if (element) {
-      element.style.display = 'flex';
-      setModuleVisibility('wosDoiQuery', true);
-      setModuleVisibility('easyscholar', true);
-      switchToJournalTab();
-      sendResponse({ success: true, action: 'shown' });
-      return true;
-    }
-
-    injectModule('wosDoiQuery');
-    setTimeout(() => {
-      setModuleVisibility('wosDoiQuery', true);
-      setModuleVisibility('easyscholar', true);
-      switchToJournalTab();
-    }, 100);
-    sendResponse({ success: true, action: 'injected' });
+    sendResponse(openWosDoiQueryPanel('journal'));
     return true;
   }
 
@@ -464,29 +777,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (!requireWosPage(sendResponse, 'DOI Batch Query')) {
       return true;
     }
-    const element = document.getElementById(MODULES.wosDoiQuery.elementId);
-    if (element) {
-      element.style.display = 'flex';
-      setModuleVisibility('wosDoiQuery', true);
-      if (request.preferredTab) {
-        document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
-          detail: { tab: request.preferredTab }
-        }));
-      }
-      sendResponse({ success: true, action: 'shown' });
-      return true;
-    }
-
-    injectModule('wosDoiQuery');
-    setTimeout(() => {
-      setModuleVisibility('wosDoiQuery', true);
-      if (request.preferredTab) {
-        document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
-          detail: { tab: request.preferredTab }
-        }));
-      }
-    }, 100);
-    sendResponse({ success: true, action: 'injected' });
+    sendResponse(openWosDoiQueryPanel(request.preferredTab));
     return true;
   }
 
@@ -651,10 +942,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 if (isWosPage()) {
-  injectModule('wosDoiQuery');
-  setTimeout(() => {
-    setModuleVisibility('wosDoiQuery', true);
-  }, 100);
+  bootstrapWosToolbarShortcuts();
 }
 
 if (isWosPage()) {
@@ -662,13 +950,6 @@ if (isWosPage()) {
     if (result.easyscholarEnabled) {
       setModuleVisibility('easyscholar', true);
       injectModule('easyscholar');
-    }
-  });
-
-  chrome.storage.local.get(['wosDoiQueryEnabled'], result => {
-    if (result.wosDoiQueryEnabled) {
-      setModuleVisibility('wosDoiQuery', true);
-      injectModule('wosDoiQuery');
     }
   });
 

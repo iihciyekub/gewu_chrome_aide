@@ -184,6 +184,8 @@ window.wosids = [];
     const WIDTH_KEY = "clipboard-reader-box-width";
     const HEIGHT_KEY = "clipboard-reader-box-height";
     const COLLAPSED_KEY = "clipboard-reader-box-collapsed";
+    const VISIBILITY_KEY = "clipboard-reader-box-visible";
+    const SINGLE_PANEL_LAYOUT_PREFIX = "clipboard-reader-box-single-layout";
     const HISTORY_KEY = "clipboard-reader-box-history";
     const WOS_QUERY_HISTORY_KEY = "wos-query-builder-history";
     const EASYSCHOLAR_VERIFIED_KEY = "wos-easyscholar-api-key-verified";
@@ -196,6 +198,8 @@ window.wosids = [];
     const WOS_QUERY_LMSTUDIO_VERIFIED_KEY = "wosLmStudioVerified";
     const WOS_QUERY_ACCESS_SYNC_EVENT = "__WOS_QUERY_ACCESS_SYNC__";
     const JOURNAL_LAYOUT_SYNC_EVENT = "__WOS_AIDE_JOURNAL_LAYOUT_SYNC__";
+    const PANEL_MODE_EVENT = "__WOS_DOI_QUERY_PANEL_MODE__";
+    const PANEL_STATE_EVENT = "__WOS_DOI_QUERY_PANEL_STATE__";
     const LM_STUDIO_BASE_URL_STORAGE_KEY = "wosLmStudioBaseUrl";
     const LM_STUDIO_MODEL_STORAGE_KEY = "wosLmStudioModel";
     const LM_STUDIO_API_KEY_STORAGE_KEY = "wosLmStudioApiKey";
@@ -205,7 +209,14 @@ window.wosids = [];
     const savedWidth = readStorage(WIDTH_KEY, "260px");
     const savedHeight = readStorage(HEIGHT_KEY, "520px");
     const savedCollapsed = readStorage(COLLAPSED_KEY, "false") === "true";
+    const savedVisible = readStorage(VISIBILITY_KEY, "false") === "true";
     const COLLAPSED_HEIGHT = 40;
+    const SINGLE_PANEL_DEFAULTS = {
+        query: { width: 320, height: 420 },
+        export: { width: 360, height: 380 },
+        journal: { width: 420, height: 420 },
+        builder: { width: 360, height: 320 }
+    };
 
     // 历史记录管理
     let queryHistory = [];
@@ -344,12 +355,13 @@ window.wosids = [];
     box.style.left = `${Math.round(left)}px`;
     box.style.right = "auto";
     box.style.zIndex = "999999";
+    box.style.boxSizing = "border-box";
     box.style.fontFamily = PANEL_FONT_STACK;
     box.style.fontSize = '14px';
     box.style.background = "#ffffff";
     box.style.padding = "0";
     box.style.borderRadius = "2px";
-    box.style.display = "none"; // 默认隐藏，等待popup开启
+    box.style.display = savedVisible ? "flex" : "none";
     box.style.flexDirection = "column";
     box.style.border = "none";
     box.style.boxShadow = "0 2px 8px rgba(15, 23, 42, 0.10)";
@@ -358,6 +370,7 @@ window.wosids = [];
     box.style.minWidth = "260px";
     box.style.minHeight = `${savedCollapsed ? COLLAPSED_HEIGHT : 320}px`;
     box.style.overflow = "hidden";
+    box.style.transition = "box-shadow 0.12s ease";
 
     // 控制栏（标题和拖动按钮）
     const controlRow = document.createElement("div");
@@ -452,12 +465,52 @@ window.wosids = [];
     closeBtn.title = "Close panel";
     // onclick 将在后面定义
 
+    const singlePanelCloseBtn = document.createElement("button");
+    singlePanelCloseBtn.innerHTML = `<i class="fa-solid fa-xmark"></i>`;
+    singlePanelCloseBtn.style.position = "absolute";
+    singlePanelCloseBtn.style.top = "8px";
+    singlePanelCloseBtn.style.right = "8px";
+    singlePanelCloseBtn.style.zIndex = "2";
+    singlePanelCloseBtn.style.width = "24px";
+    singlePanelCloseBtn.style.height = "24px";
+    singlePanelCloseBtn.style.display = "none";
+    singlePanelCloseBtn.style.alignItems = "center";
+    singlePanelCloseBtn.style.justifyContent = "center";
+    singlePanelCloseBtn.style.border = "1px solid rgba(23,75,120,0.12)";
+    singlePanelCloseBtn.style.borderRadius = "999px";
+    singlePanelCloseBtn.style.background = "#ffffff";
+    singlePanelCloseBtn.style.color = "#5a6782";
+    singlePanelCloseBtn.style.cursor = "pointer";
+    singlePanelCloseBtn.style.boxShadow = "0 1px 3px rgba(15, 23, 42, 0.08)";
+    singlePanelCloseBtn.title = "Close panel";
+
+    const singlePanelResetBtn = document.createElement("button");
+    singlePanelResetBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i>`;
+    singlePanelResetBtn.style.position = "absolute";
+    singlePanelResetBtn.style.top = "8px";
+    singlePanelResetBtn.style.right = "38px";
+    singlePanelResetBtn.style.zIndex = "2";
+    singlePanelResetBtn.style.width = "24px";
+    singlePanelResetBtn.style.height = "24px";
+    singlePanelResetBtn.style.display = "none";
+    singlePanelResetBtn.style.alignItems = "center";
+    singlePanelResetBtn.style.justifyContent = "center";
+    singlePanelResetBtn.style.border = "1px solid rgba(23,75,120,0.12)";
+    singlePanelResetBtn.style.borderRadius = "999px";
+    singlePanelResetBtn.style.background = "#ffffff";
+    singlePanelResetBtn.style.color = "#5a6782";
+    singlePanelResetBtn.style.cursor = "pointer";
+    singlePanelResetBtn.style.boxShadow = "0 1px 3px rgba(15, 23, 42, 0.08)";
+    singlePanelResetBtn.title = "Reset panel size";
+
     controlRow.appendChild(title);
     titleBtnGroup.appendChild(collapseBtn);
     titleBtnGroup.appendChild(copySidBtn);
     titleBtnGroup.appendChild(closeBtn);
     controlRow.appendChild(titleBtnGroup);
     box.appendChild(controlRow);
+    box.appendChild(singlePanelResetBtn);
+    box.appendChild(singlePanelCloseBtn);
 
     // Tab 容器
     const tabRow = document.createElement('div');
@@ -525,9 +578,101 @@ window.wosids = [];
     tabContentWrap.style.paddingTop = '4px';
     tabContentWrap.style.overflow = 'auto';
 
-    let resizeHandle = null;
+    let resizeHandles = [];
     let isCollapsed = savedCollapsed;
     let expandedHeightPx = initialHeight;
+    let currentPanelMode = 'batch';
+    let currentActiveTab = 'query';
+    let currentSingleAnchorRect = null;
+
+    const TAB_TITLES = {
+        query: 'DOI Query',
+        export: 'WOS Data Export',
+        journal: 'Journal Query',
+        builder: 'WOS Query'
+    };
+
+    const getSinglePanelLayoutKey = (tabName, field) => `${SINGLE_PANEL_LAYOUT_PREFIX}-${tabName}-${field}`;
+
+    const getSinglePanelLayout = (tabName) => {
+        const defaults = SINGLE_PANEL_DEFAULTS[tabName] || SINGLE_PANEL_DEFAULTS.query;
+        return {
+            width: Math.max(180, parseInt(readStorage(getSinglePanelLayoutKey(tabName, 'width'), String(defaults.width)), 10) || defaults.width),
+            height: Math.max(120, parseInt(readStorage(getSinglePanelLayoutKey(tabName, 'height'), String(defaults.height)), 10) || defaults.height)
+        };
+    };
+
+    const saveSinglePanelLayout = (tabName, width, height) => {
+        writeStorage(getSinglePanelLayoutKey(tabName, 'width'), String(Math.round(width)));
+        writeStorage(getSinglePanelLayoutKey(tabName, 'height'), String(Math.round(height)));
+    };
+
+    const resetSinglePanelLayout = (tabName) => {
+        const defaults = SINGLE_PANEL_DEFAULTS[tabName] || SINGLE_PANEL_DEFAULTS.query;
+        saveSinglePanelLayout(tabName, defaults.width, defaults.height);
+        expandedHeightPx = defaults.height;
+        box.style.width = `${defaults.width}px`;
+        box.style.height = `${defaults.height}px`;
+        box.style.minHeight = `0px`;
+        applySinglePanelPlacement();
+        ensurePanelInView();
+    };
+
+    const applySinglePanelPlacement = () => {
+        const { width, height } = getSinglePanelLayout(currentActiveTab);
+        expandedHeightPx = height;
+        box.style.width = `${width}px`;
+        box.style.minWidth = `0px`;
+        box.style.height = `${height}px`;
+        box.style.minHeight = `0px`;
+        const margin = 16;
+        const fallbackTop = Math.max(24, Math.round(window.innerHeight * 0.18));
+        const anchorTop = currentSingleAnchorRect?.top ?? fallbackTop;
+        const anchorLeft = currentSingleAnchorRect?.left ?? 52;
+        const nextTop = Math.max(16, Math.round(anchorTop + (((currentSingleAnchorRect?.height || 38) - height) / 2)));
+        const nextLeft = Math.round(anchorLeft + (currentSingleAnchorRect?.width || 38) + margin);
+        const clamped = window.clampPanelPosition({
+            top: `${nextTop}px`,
+            left: `${nextLeft}px`,
+            defaultTop: nextTop,
+            defaultLeft: nextLeft,
+            width,
+            height,
+            margin: 8
+        });
+        box.style.top = `${Math.round(clamped.top)}px`;
+        box.style.left = `${Math.round(clamped.left)}px`;
+    };
+
+    const applyPanelMode = () => {
+        const isSinglePanel = currentPanelMode === 'single';
+        title.textContent = 'Batch Query';
+        controlRow.style.display = isSinglePanel ? 'none' : 'flex';
+        singlePanelResetBtn.style.display = isSinglePanel ? 'inline-flex' : 'none';
+        singlePanelCloseBtn.style.display = isSinglePanel ? 'inline-flex' : 'none';
+        tabRow.style.display = isCollapsed ? 'none' : (isSinglePanel ? 'none' : 'flex');
+        copySidBtn.style.display = isSinglePanel ? 'none' : 'inline-flex';
+        collapseBtn.style.display = isSinglePanel ? 'none' : 'inline-flex';
+        controlRow.style.cursor = isSinglePanel ? 'default' : 'move';
+        title.style.cursor = isSinglePanel ? 'default' : 'move';
+        box.style.borderRadius = isSinglePanel ? '16px' : '2px';
+        box.style.boxShadow = isSinglePanel
+            ? '0 10px 28px rgba(15, 23, 42, 0.14)'
+            : '0 2px 8px rgba(15, 23, 42, 0.10)';
+        tabContentWrap.style.paddingTop = isSinglePanel ? '14px' : '4px';
+        if (isSinglePanel) {
+            applySinglePanelPlacement();
+        } else {
+            box.style.width = `${Math.max(260, parseInt(readStorage(WIDTH_KEY, "260px"), 10) || 260)}px`;
+            box.style.minWidth = '260px';
+            box.style.minHeight = `${Math.max(320, expandedHeightPx)}px`;
+        }
+        if (resizeHandles.length) {
+            resizeHandles.forEach((handle) => {
+                handle.style.display = isCollapsed ? 'none' : 'block';
+            });
+        }
+    };
 
     const autoResizeForJournalTab = (contentHeight = 0) => {
         if (isCollapsed || box.style.display === 'none' || journalTabPanel.style.display === 'none') {
@@ -547,10 +692,10 @@ window.wosids = [];
             const desiredHeight = Math.ceil(
                 controlHeight + tabHeight + wrapPaddingTop + wrapPaddingBottom + journalContentHeight
             );
-            const nextHeight = Math.max(320, desiredHeight);
+            const nextHeight = Math.max(currentPanelMode === 'single' ? 120 : 320, desiredHeight);
             expandedHeightPx = nextHeight;
             box.style.height = `${nextHeight}px`;
-            box.style.minHeight = `${nextHeight}px`;
+            box.style.minHeight = currentPanelMode === 'single' ? `0px` : `${nextHeight}px`;
             writeStorage(HEIGHT_KEY, box.style.height);
             ensurePanelInView();
         });
@@ -566,12 +711,13 @@ window.wosids = [];
             ? `<i class="fa-solid fa-chevron-down"></i>`
             : `<i class="fa-solid fa-chevron-up"></i>`;
         collapseBtn.title = isCollapsed ? 'Expand panel' : 'Collapse panel';
-        if (resizeHandle) {
-            resizeHandle.style.display = isCollapsed ? 'none' : 'block';
-        }
+        applyPanelMode();
         writeStorage(COLLAPSED_KEY, String(isCollapsed));
         if (!isCollapsed) {
             writeStorage(HEIGHT_KEY, box.style.height);
+        }
+        if (!isCollapsed && currentPanelMode === 'single') {
+            saveSinglePanelLayout(currentActiveTab, box.offsetWidth, expandedHeightPx);
         }
         ensurePanelInView();
     };
@@ -628,6 +774,7 @@ window.wosids = [];
     box.appendChild(tabContentWrap);
 
     const setActiveTab = (tabName) => {
+        currentActiveTab = tabName;
         const isQuery = tabName === 'query';
         const isExport = tabName === 'export';
         const isJournal = tabName === 'journal';
@@ -654,11 +801,10 @@ window.wosids = [];
         builderTabBtn.style.color = isBuilder ? '#ffffff' : '#1f5a92';
         builderTabBtn.style.borderColor = isBuilder ? '#123a5c' : '#c8d5e2';
 
+        applyPanelMode();
+
         if (isExport && typeof refreshExportUuidInfo === 'function') {
             refreshExportUuidInfo();
-        }
-        if (isJournal) {
-            autoResizeForJournalTab();
         }
     };
 
@@ -748,6 +894,43 @@ window.wosids = [];
         setActiveTab(tabName);
     });
 
+    document.addEventListener(PANEL_MODE_EVENT, (event) => {
+        currentPanelMode = event?.detail?.mode === 'single' ? 'single' : 'batch';
+        currentSingleAnchorRect = event?.detail?.anchorRect || currentSingleAnchorRect;
+        if (event?.detail?.tab) {
+            currentActiveTab = event.detail.tab;
+        }
+        applyPanelMode();
+        if (currentPanelMode === 'single' && currentActiveTab === 'journal') {
+            const savedLayout = getSinglePanelLayout(currentActiveTab);
+            expandedHeightPx = savedLayout.height;
+            box.style.width = `${savedLayout.width}px`;
+            box.style.height = `${savedLayout.height}px`;
+            box.style.minHeight = `0px`;
+            ensurePanelInView();
+        } else if (currentPanelMode === 'single') {
+            requestAnimationFrame(() => {
+                const savedLayout = getSinglePanelLayout(currentActiveTab);
+                expandedHeightPx = savedLayout.height;
+                box.style.width = `${savedLayout.width}px`;
+                box.style.height = `${savedLayout.height}px`;
+                box.style.minHeight = `0px`;
+                ensurePanelInView();
+            });
+        }
+    });
+
+    document.addEventListener(PANEL_STATE_EVENT, (event) => {
+        if (event?.detail?.requestState) {
+            document.dispatchEvent(new CustomEvent(PANEL_STATE_EVENT, {
+                detail: {
+                    mode: currentPanelMode,
+                    tab: currentActiveTab
+                }
+            }));
+        }
+    });
+
     requestStorage("get", EASYSCHOLAR_VERIFIED_KEY).then((value) => {
         applyJournalAccess(value === true || value === "true");
     });
@@ -770,15 +953,40 @@ window.wosids = [];
 
     ensureEasyScholarMounted();
 
-    resizeHandle = document.createElement("div");
-    resizeHandle.style.position = "absolute";
-    resizeHandle.style.right = "0";
-    resizeHandle.style.bottom = "0";
-    resizeHandle.style.width = "14px";
-    resizeHandle.style.height = "14px";
-    resizeHandle.style.cursor = "nwse-resize";
-    resizeHandle.style.background = "linear-gradient(135deg, transparent 0 42%, rgba(23,75,120,0.45) 42% 54%, transparent 54% 66%, rgba(23,75,120,0.45) 66% 78%, transparent 78%)";
-    resizeHandle.style.userSelect = "none";
+    const topResizeHandle = document.createElement("div");
+    topResizeHandle.style.position = "absolute";
+    topResizeHandle.style.top = "-3px";
+    topResizeHandle.style.left = "0";
+    topResizeHandle.style.width = "100%";
+    topResizeHandle.style.height = "8px";
+    topResizeHandle.style.cursor = "ns-resize";
+    topResizeHandle.style.background = "transparent";
+    topResizeHandle.style.userSelect = "none";
+    topResizeHandle.style.zIndex = "3";
+
+    const rightResizeHandle = document.createElement("div");
+    rightResizeHandle.style.position = "absolute";
+    rightResizeHandle.style.top = "0";
+    rightResizeHandle.style.right = "-3px";
+    rightResizeHandle.style.width = "8px";
+    rightResizeHandle.style.height = "100%";
+    rightResizeHandle.style.cursor = "ew-resize";
+    rightResizeHandle.style.background = "transparent";
+    rightResizeHandle.style.userSelect = "none";
+    rightResizeHandle.style.zIndex = "3";
+
+    const bottomResizeHandle = document.createElement("div");
+    bottomResizeHandle.style.position = "absolute";
+    bottomResizeHandle.style.bottom = "-3px";
+    bottomResizeHandle.style.left = "0";
+    bottomResizeHandle.style.width = "100%";
+    bottomResizeHandle.style.height = "8px";
+    bottomResizeHandle.style.cursor = "ns-resize";
+    bottomResizeHandle.style.background = "transparent";
+    bottomResizeHandle.style.userSelect = "none";
+    bottomResizeHandle.style.zIndex = "3";
+
+    resizeHandles = [topResizeHandle, rightResizeHandle, bottomResizeHandle];
     applyCollapsedState();
 
     // 内容容器
@@ -2035,7 +2243,7 @@ Additional output rules:
     wosQueryRow.appendChild(wosQueryModelHint);
     wosQueryRow.appendChild(wosQueryActions);
     builderTabPanel.appendChild(wosQueryRow);
-    box.appendChild(resizeHandle);
+    resizeHandles.forEach((handle) => box.appendChild(handle));
 
     document.body.appendChild(box);
 
@@ -2065,6 +2273,17 @@ Additional output rules:
         cleanup();
     };
 
+    singlePanelCloseBtn.onclick = (e) => {
+        e.stopPropagation();
+        box.style.display = "none";
+        writeStorage(VISIBILITY_KEY, "false");
+    };
+
+    singlePanelResetBtn.onclick = (e) => {
+        e.stopPropagation();
+        resetSinglePanelLayout(currentActiveTab);
+    };
+
     collapseBtn.onclick = (e) => {
         e.stopPropagation();
         if (!isCollapsed) {
@@ -2086,20 +2305,52 @@ Additional output rules:
         let startY = 0;
         let startWidth = 0;
         let startHeight = 0;
+        let startTop = 0;
+        let resizeDirection = '';
 
         const onResizeMouseMove = (e) => {
             if (!isResizing || isCollapsed) return;
-            const nextWidth = Math.min(
-                Math.max(260, startWidth + (e.clientX - startX)),
-                window.innerWidth - 16
-            );
-            const nextHeight = Math.min(
-                Math.max(320, startHeight + (e.clientY - startY)),
-                window.innerHeight - 16
-            );
-            box.style.width = `${Math.round(nextWidth)}px`;
-            box.style.height = `${Math.round(nextHeight)}px`;
-            expandedHeightPx = Math.round(nextHeight);
+            const minWidth = currentPanelMode === 'single' ? 180 : 260;
+            const minHeight = currentPanelMode === 'single' ? 120 : 320;
+            let nextWidth = startWidth;
+            let nextHeight = startHeight;
+            let nextTop = startTop;
+
+            if (resizeDirection === 'right') {
+                nextWidth = Math.min(
+                    Math.max(minWidth, startWidth + (e.clientX - startX)),
+                    window.innerWidth - box.offsetLeft - 8
+                );
+                box.style.width = `${Math.round(nextWidth)}px`;
+            }
+
+            if (resizeDirection === 'bottom') {
+                nextHeight = Math.min(
+                    Math.max(minHeight, startHeight + (e.clientY - startY)),
+                    window.innerHeight - 8
+                );
+                box.style.height = `${Math.round(nextHeight)}px`;
+                box.style.minHeight = currentPanelMode === 'single' ? `0px` : `${Math.round(nextHeight)}px`;
+                expandedHeightPx = Math.round(nextHeight);
+            }
+
+            if (resizeDirection === 'top') {
+                const deltaY = e.clientY - startY;
+                nextHeight = Math.max(minHeight, startHeight - deltaY);
+                nextTop = startTop + deltaY;
+                if (nextTop < 8) {
+                    nextHeight -= (8 - nextTop);
+                    nextTop = 8;
+                }
+                box.style.top = `${Math.round(nextTop)}px`;
+                box.style.height = `${Math.round(nextHeight)}px`;
+                box.style.minHeight = currentPanelMode === 'single' ? `0px` : `${Math.round(nextHeight)}px`;
+                expandedHeightPx = Math.round(nextHeight);
+            }
+
+            if (currentPanelMode === 'single') {
+                saveSinglePanelLayout(currentActiveTab, box.offsetWidth, box.offsetHeight);
+            }
         };
 
         const onResizeMouseUp = () => {
@@ -2107,27 +2358,62 @@ Additional output rules:
             isResizing = false;
             writeStorage(WIDTH_KEY, box.style.width);
             writeStorage(HEIGHT_KEY, box.style.height);
+            if (currentPanelMode === 'single') {
+                saveSinglePanelLayout(currentActiveTab, box.offsetWidth, box.offsetHeight);
+            }
             ensurePanelInView();
             document.body.style.userSelect = "";
         };
 
-        const onResizeMouseDown = (e) => {
+        const onTopResizeMouseDown = (e) => {
             isResizing = true;
+            resizeDirection = 'top';
             startX = e.clientX;
             startY = e.clientY;
             startWidth = box.offsetWidth;
             startHeight = expandedHeightPx;
+            startTop = box.offsetTop;
             document.body.style.userSelect = "none";
             e.preventDefault();
             e.stopPropagation();
         };
 
-        resizeHandle.addEventListener("mousedown", onResizeMouseDown);
+        const onRightResizeMouseDown = (e) => {
+            isResizing = true;
+            resizeDirection = 'right';
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = box.offsetWidth;
+            startHeight = expandedHeightPx;
+            startTop = box.offsetTop;
+            document.body.style.userSelect = "none";
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        const onBottomResizeMouseDown = (e) => {
+            isResizing = true;
+            resizeDirection = 'bottom';
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = box.offsetWidth;
+            startHeight = expandedHeightPx;
+            startTop = box.offsetTop;
+            document.body.style.userSelect = "none";
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        topResizeHandle.addEventListener("mousedown", onTopResizeMouseDown);
+        rightResizeHandle.addEventListener("mousedown", onRightResizeMouseDown);
+        bottomResizeHandle.addEventListener("mousedown", onBottomResizeMouseDown);
         document.addEventListener("mousemove", onResizeMouseMove);
         document.addEventListener("mouseup", onResizeMouseUp);
 
         resizeCleanup = () => {
-            resizeHandle.removeEventListener("mousedown", onResizeMouseDown);
+            topResizeHandle.removeEventListener("mousedown", onTopResizeMouseDown);
+            rightResizeHandle.removeEventListener("mousedown", onRightResizeMouseDown);
+            bottomResizeHandle.removeEventListener("mousedown", onBottomResizeMouseDown);
             document.removeEventListener("mousemove", onResizeMouseMove);
             document.removeEventListener("mouseup", onResizeMouseUp);
             document.body.style.userSelect = "";
@@ -2164,6 +2450,7 @@ Additional output rules:
             const visible = e.detail.visible;
             const beforeDisplay = box.style.display;
             box.style.display = visible ? "flex" : "none";
+            writeStorage(VISIBILITY_KEY, String(visible));
             const afterDisplay = box.style.display;
             console.log(`[WOS DOI Query] Display changed: ${beforeDisplay} -> ${afterDisplay}, box exists: ${!!box}, box in DOM: ${document.contains(box)}`);
             if (visible) {
@@ -2176,6 +2463,7 @@ Additional output rules:
     // 监听显示面板事件
     showHandler = () => {
         box.style.display = "flex";
+        writeStorage(VISIBILITY_KEY, "true");
         console.log("[WOS DOI Query] Panel shown");
     };
     document.addEventListener("__SHOW_WOS_DOI_QUERY__", showHandler);
@@ -2183,6 +2471,7 @@ Additional output rules:
     // 监听隐藏面板事件
     hideHandler = () => {
         box.style.display = "none";
+        writeStorage(VISIBILITY_KEY, "false");
         console.log("[WOS DOI Query] Panel hidden");
     };
     document.addEventListener("__HIDE_WOS_DOI_QUERY__", hideHandler);

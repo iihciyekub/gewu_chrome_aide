@@ -17,6 +17,7 @@ const LM_STUDIO_BASE_URL_STORAGE_KEY = 'wosLmStudioBaseUrl';
 const LM_STUDIO_MODEL_STORAGE_KEY = 'wosLmStudioModel';
 const LM_STUDIO_API_KEY_STORAGE_KEY = 'wosLmStudioApiKey';
 const EASYSCHOLAR_API_KEY_STORAGE_KEY = 'wos-easyscholar-api-key';
+const WOS_URL_RE = /^https?:\/\/([^/]+\.)?(webofscience|webofknowledge|isiknowledge)\.com\/|^https?:\/\/([^/]+\.)?clarivate\.com\//i;
 
 const easyscholarMapping = {
   swufe: '西南财经大学',
@@ -65,6 +66,32 @@ const easyscholarMapping = {
 const getStorage = (keys) => new Promise((resolve) => {
   chrome.storage.local.get(keys, result => resolve(result || {}));
 });
+
+const isWosUrl = (url) => WOS_URL_RE.test(url || '');
+
+const ensureWosContentScript = async (tabId) => {
+  if (!tabId) {
+    return;
+  }
+
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'PING_WOS_AIDE' });
+    if (response?.success) {
+      return;
+    }
+  } catch (_error) {
+    // Fall through to executeScript when there is no receiving end yet.
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['contentScript.js']
+    });
+  } catch (_error) {
+    // Ignore reinjection failures on restricted/transition pages.
+  }
+};
 
 const normalizeOgAndOperators = (rowText) => String(rowText || '').replace(/OG=\(([^)]*)\)/gi, (_match, inner) => {
   const normalizedInner = inner
@@ -317,6 +344,16 @@ async function readFileContent(fileHandle) {
     throw error;
   }
 }
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete') {
+    return;
+  }
+  if (!isWosUrl(tab?.url || '')) {
+    return;
+  }
+  ensureWosContentScript(tabId);
+});
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'ENSURE_FONT_AWESOME') {
