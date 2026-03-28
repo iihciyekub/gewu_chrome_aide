@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WOS Aide Privacy Policy</title>
+  <meta name="description" content="Privacy Policy for the WOS Aide Chrome extension." />
+  <style>
+    :root {
+      --bg: #eef1ff;
+      --bg-soft: #f8f9ff;
+      --panel: #ffffff;
+      --text: #1c2340;
+      --muted: #5a6785;
+      --line: #d7ddf3;
+      --accent: #445488;
+      --accent-soft: #e7ebfb;
+      --shadow: 0 18px 48px rgba(31, 43, 77, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, #f8f9ff 0, #f8f9ff 18rem, transparent 18rem),
+        linear-gradient(180deg, #eef1ff 0%, #f7f8ff 100%);
+      line-height: 1.65;
+    }
+
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 48px 20px 72px;
+    }
+
+    .hero {
+      margin-bottom: 24px;
+      padding: 28px 28px 22px;
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    h1 {
+      margin: 16px 0 10px;
+      font-size: clamp(36px, 6vw, 56px);
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .meta {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .content {
+      padding: 28px;
+      border-radius: 28px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 30px 0 12px;
+      font-size: 24px;
+      letter-spacing: -0.02em;
+    }
+
+    h3 {
+      margin: 22px 0 10px;
+      font-size: 18px;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul {
+      margin: 0 0 16px 20px;
+      padding: 0;
+    }
+
+    li + li {
+      margin-top: 6px;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .footer {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        padding: 20px 14px 40px;
+      }
+
+      .hero,
+      .content {
+        padding: 20px;
+        border-radius: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="eyebrow">WOS Aide</div>
+      <h1>Privacy Policy</h1>
+      <p class="subtitle">This page explains what WOS Aide stores, what it sends to third-party services, and how users can control their data.</p>
+      <p class="meta">Last updated: March 28, 2026</p>
+    </section>
+
+    <article class="content">
+      <h2>Overview</h2>
+      <p>WOS Aide is a Chrome extension designed to assist research workflows on Web of Science and related pages. The extension stores user settings locally in the browser and sends user-requested query content only to the external services needed to fulfill the selected feature.</p>
+
+      <h2>Data We Store</h2>
+      <p>WOS Aide stores the following data locally in Chrome extension storage and, where needed for page UI state, in browser page storage:</p>
+      <ul>
+        <li>OpenAI API key provided by the user</li>
+        <li>LM Studio base URL, model name, and optional API key provided by the user</li>
+        <li>EasyScholar API key provided by the user</li>
+        <li>Feature enable or disable settings</li>
+        <li>Panel visibility, position, and UI preferences</li>
+        <li>DOI lists captured for the current workflow</li>
+        <li>Local query history used to improve the user experience</li>
+      </ul>
+      <p>This data is stored locally on the user's device. WOS Aide does not operate its own remote server for storing user account data.</p>
+
+      <h2>Data Sent to Third Parties</h2>
+      <p>WOS Aide sends data only when the user enables or actively uses a feature that requires an external service.</p>
+
+      <h3>OpenAI</h3>
+      <p>If the user selects OpenAI as the WOS Query provider, WOS Aide sends:</p>
+      <ul>
+        <li>The user's research query text</li>
+        <li>The selected model identifier</li>
+      </ul>
+      <p>to <code>https://api.openai.com/v1/responses</code>. The user's OpenAI API key is used only to authenticate that request.</p>
+
+      <h3>LM Studio</h3>
+      <p>If the user selects LM Studio as the WOS Query provider, WOS Aide sends:</p>
+      <ul>
+        <li>The user's research query text</li>
+        <li>The selected local model identifier</li>
+      </ul>
+      <p>to the user-configured local endpoint, for example <code>http://127.0.0.1:1234/v1/chat/completions</code>. Any LM Studio API key configured by the user is used only for that local endpoint.</p>
+
+      <h3>EasyScholar</h3>
+      <p>If the user uses Journal Lookup, WOS Aide sends:</p>
+      <ul>
+        <li>The journal or publication name entered or captured by the user</li>
+      </ul>
+      <p>to <code>https://www.easyscholar.cc/open/getPublicationRank</code>. The user's EasyScholar API key is used only to authenticate that request.</p>
+
+      <h2>Local File Access</h2>
+      <p>Some export and download features can ask the user to choose a local directory using the browser file picker. WOS Aide only accesses directories the user explicitly selects. Directory access is used to support user-requested research workflows such as reading or saving files locally.</p>
+      <p>WOS Aide does not upload local files to a developer-operated server.</p>
+
+      <h2>Permissions</h2>
+      <p>WOS Aide requests only the permissions needed for its functionality:</p>
+      <ul>
+        <li><code>storage</code>: save user settings and workflow state locally</li>
+        <li><code>clipboardWrite</code>: copy workflow content on user request</li>
+        <li><code>activeTab</code>: interact with the tab the user is actively using</li>
+        <li><code>scripting</code>: inject extension UI and workflow helpers when needed</li>
+      </ul>
+      <p>Host permissions are used only for OpenAI API requests, EasyScholar API requests, supported Web of Science or Clarivate pages, and user-configured local LM Studio endpoints.</p>
+
+      <h2>Data Sharing and Selling</h2>
+      <p>WOS Aide does not sell personal data.</p>
+      <p>WOS Aide does not share user data with third parties except when the user explicitly uses a feature that requires sending the request to OpenAI, EasyScholar, or the user's own LM Studio endpoint.</p>
+
+      <h2>Data Retention and Control</h2>
+      <p>Users can control their stored data by:</p>
+      <ul>
+        <li>Clearing API keys in the extension popup</li>
+        <li>Clearing DOI lists in the extension popup</li>
+        <li>Removing the extension from Chrome</li>
+        <li>Clearing browser storage</li>
+      </ul>
+
+      <h2>Contact</h2>
+      <p>Before publication, replace this placeholder with your real support contact email or website.</p>
+
+      <p class="footer">Source repository: <a href="https://github.com/iihciyekub/gewu_chrome_aide">github.com/iihciyekub/gewu_chrome_aide</a></p>
+    </article>
+  </main>
+</body>
+</html>
