@@ -5,10 +5,11 @@ WOS Aide is a Chrome extension for Web of Science users. It helps streamline com
 ## What It Does
 
 - Open a floating Batch Query panel directly on Web of Science pages
+- Show sticky or floating toolbar shortcuts for quick WoS actions
 - Build and run WoS queries with OpenAI or LM Studio
 - Run DOI-based and journal-based lookup workflows
 - Export WoS records in TXT or BIB format
-- Copy the current WoS SID quickly from the panel header
+- Copy the current WoS SID quickly from the panel header or toolbar shortcut
 - Batch download PDFs from DOI lists
 
 ## Main Panels
@@ -49,7 +50,7 @@ Create a production build:
 npm run build
 ```
 
-The packaged extension files are generated in the [`build`](/Users/iipro/iiworkspace/gewu_chrome_aide/build) directory.
+The packaged extension files are generated in the `build/` directory.
 
 ## Install Locally
 
@@ -57,14 +58,15 @@ The packaged extension files are generated in the [`build`](/Users/iipro/iiworks
 2. Open `chrome://extensions`
 3. Enable `Developer mode`
 4. Click `Load unpacked`
-5. Select the [`build`](/Users/iipro/iiworkspace/gewu_chrome_aide/build) folder
+5. Select the `build/` folder
 
 ## Notes
 
 - This extension is designed for WOS-related research workflows on Web of Science.
 - API keys are stored locally in Chrome extension storage.
 - Some features require the current page to be a valid Web of Science results page.
-- See [`PRIVACY.md`](/Users/iipro/iiworkspace/gewu_chrome_aide/PRIVACY.md) for the current privacy policy draft.
-- See [`STORE_LISTING.md`](/Users/iipro/iiworkspace/gewu_chrome_aide/STORE_LISTING.md) for Web Store submission notes and permission explanations.
-- See [`STORE_LISTING_BILINGUAL.md`](/Users/iipro/iiworkspace/gewu_chrome_aide/STORE_LISTING_BILINGUAL.md) for copy-ready English and Chinese store listing text.
-- See [`CWS_DISCLOSURE_CHECKLIST.md`](/Users/iipro/iiworkspace/gewu_chrome_aide/CWS_DISCLOSURE_CHECKLIST.md) for a suggested Chrome Web Store privacy disclosure checklist.
+- See [`CHANGELOG.md`](CHANGELOG.md) for recent product and UI updates.
+- See [`PRIVACY.md`](PRIVACY.md) for the current privacy policy draft.
+- See [`STORE_LISTING.md`](STORE_LISTING.md) for Web Store submission notes and permission explanations.
+- See [`STORE_LISTING_BILINGUAL.md`](STORE_LISTING_BILINGUAL.md) for copy-ready English and Chinese store listing text.
+- See [`CWS_DISCLOSURE_CHECKLIST.md`](CWS_DISCLOSURE_CHECKLIST.md) for a suggested Chrome Web Store privacy disclosure checklist.
