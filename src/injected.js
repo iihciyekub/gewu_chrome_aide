@@ -134,6 +134,20 @@
     return await window.copyFileToClipboard(fileInfo.path);
   };
 
+  document.addEventListener('__WOS_AIDE_GET_SID_INFO__', (event) => {
+    const requestId = event?.detail?.requestId;
+    const sidFromPage = String(window?.wos?.SID || window?.sessionData?.BasicProperties?.SID || '').trim();
+    const sidFromUrl = String(new URL(window.location.href).searchParams.get('SID') || new URL(window.location.href).searchParams.get('sid') || '').trim();
+    const sid = sidFromPage || sidFromUrl;
+
+    document.dispatchEvent(new CustomEvent('__WOS_AIDE_GET_SID_INFO_RESPONSE__', {
+      detail: {
+        requestId,
+        sid
+      }
+    }));
+  });
+
   // ========== WOS Aide Project ==========
   document.addEventListener('__GET_WOS_AIDE_PROJECT__', () => {
     try {

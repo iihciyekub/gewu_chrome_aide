@@ -173,12 +173,16 @@ const FETCH_EASYSCHOLAR_RANK_REQUEST_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_
 const FETCH_EASYSCHOLAR_RANK_RESPONSE_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_RESPONSE__';
 const WOS_TOOLBAR_SHORTCUTS_ID = 'wos-aide-toolbar-shortcuts';
 const WOS_TOOLBAR_SHORTCUTS_STYLE_ID = 'wos-aide-toolbar-shortcuts-style';
+const WOS_TOOLBAR_INFO_POPUP_ID = 'wos-aide-toolbar-info-popup';
 const WOS_DOI_QUERY_PANEL_MODE_EVENT = '__WOS_DOI_QUERY_PANEL_MODE__';
 const WOS_DOI_QUERY_PANEL_STATE_EVENT = '__WOS_DOI_QUERY_PANEL_STATE__';
+const GET_WOS_SID_INFO_REQUEST_EVENT = '__WOS_AIDE_GET_SID_INFO__';
+const GET_WOS_SID_INFO_RESPONSE_EVENT = '__WOS_AIDE_GET_SID_INFO_RESPONSE__';
 let isEasyScholarEnabledForToolbar = false;
 let isWosQueryEnabledForToolbar = false;
 let currentToolbarPanelMode = 'batch';
 let currentToolbarPanelTab = '';
+let activeWosToolbarPopupTrigger = null;
 const getWosToolbarShortcutDefinitions = () => {
   const buttons = [
     {
@@ -192,6 +196,12 @@ const getWosToolbarShortcutDefinitions = () => {
       title: 'WOS Data Export',
       iconHtml: '<i class="fa-regular fa-circle-down wos-aide-toolbar-icon" aria-hidden="true"></i>',
       preferredTab: 'export'
+    },
+    {
+      id: 'sid-info',
+      title: 'SID Info',
+      iconHtml: '<i class="fa-solid fa-info wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      action: 'sid-info'
     }
   ];
 
@@ -216,6 +226,157 @@ const getWosToolbarShortcutDefinitions = () => {
   return buttons;
 };
 
+const getWosSidInfo = () => new Promise((resolve) => {
+  const requestId = `sid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const timeoutId = window.setTimeout(() => {
+    document.removeEventListener(GET_WOS_SID_INFO_RESPONSE_EVENT, handleResponse);
+    resolve({
+      sid: ''
+    });
+  }, 800);
+
+  const handleResponse = (event) => {
+    if (event?.detail?.requestId !== requestId) {
+      return;
+    }
+
+    window.clearTimeout(timeoutId);
+    document.removeEventListener(GET_WOS_SID_INFO_RESPONSE_EVENT, handleResponse);
+    resolve({
+      sid: String(event?.detail?.sid || '').trim()
+    });
+  };
+
+  document.addEventListener(GET_WOS_SID_INFO_RESPONSE_EVENT, handleResponse);
+  document.dispatchEvent(new CustomEvent(GET_WOS_SID_INFO_REQUEST_EVENT, {
+    detail: { requestId }
+  }));
+});
+
+const copyTextToClipboard = async (text) => {
+  const normalizedText = String(text || '');
+  if (!normalizedText) {
+    return false;
+  }
+
+  try {
+    await navigator.clipboard.writeText(normalizedText);
+    return true;
+  } catch (error) {
+    const fallback = document.createElement('textarea');
+    fallback.value = normalizedText;
+    fallback.setAttribute('readonly', 'readonly');
+    fallback.style.position = 'fixed';
+    fallback.style.top = '-9999px';
+    fallback.style.opacity = '0';
+    (document.body || document.documentElement).appendChild(fallback);
+    fallback.focus();
+    fallback.select();
+
+    let copied = false;
+    try {
+      copied = document.execCommand('copy');
+    } catch (execError) {
+      copied = false;
+    }
+
+    fallback.remove();
+    return copied;
+  }
+};
+
+const closeWosToolbarInfoPopup = () => {
+  const popup = document.getElementById(WOS_TOOLBAR_INFO_POPUP_ID);
+  if (popup) {
+    popup.remove();
+  }
+  if (activeWosToolbarPopupTrigger) {
+    activeWosToolbarPopupTrigger.setAttribute('aria-expanded', 'false');
+    activeWosToolbarPopupTrigger = null;
+  }
+};
+
+const createWosToolbarInfoActionButton = (label, value, emptyLabel) => {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'wos-aide-toolbar-info-action';
+
+  if (!value) {
+    button.disabled = true;
+    button.textContent = emptyLabel;
+    return button;
+  }
+
+  button.textContent = label;
+  let restoreTimer = null;
+  button.addEventListener('click', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const copied = await copyTextToClipboard(value);
+    const originalLabel = label;
+    button.textContent = copied ? 'Copied' : 'Copy failed';
+
+    if (restoreTimer) {
+      clearTimeout(restoreTimer);
+    }
+    restoreTimer = window.setTimeout(() => {
+      button.textContent = originalLabel;
+      restoreTimer = null;
+    }, 1400);
+  });
+
+  return button;
+};
+
+const showWosToolbarInfoPopup = async (triggerButton) => {
+  if (!triggerButton) {
+    return;
+  }
+
+  if (activeWosToolbarPopupTrigger === triggerButton && document.getElementById(WOS_TOOLBAR_INFO_POPUP_ID)) {
+    closeWosToolbarInfoPopup();
+    return;
+  }
+
+  closeWosToolbarInfoPopup();
+
+  const { sid } = await getWosSidInfo();
+  if (!document.body && !document.documentElement) {
+    return;
+  }
+
+  const popup = document.createElement('div');
+  popup.id = WOS_TOOLBAR_INFO_POPUP_ID;
+  popup.setAttribute('role', 'dialog');
+  popup.setAttribute('aria-label', 'SID Info');
+  popup.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+
+  const title = document.createElement('div');
+  title.className = 'wos-aide-toolbar-info-title';
+  title.textContent = sid ? `SID: ${sid}` : 'SID not found';
+  popup.appendChild(title);
+
+  popup.appendChild(createWosToolbarInfoActionButton('Copy SID', sid, 'SID unavailable'));
+
+  (document.body || document.documentElement).appendChild(popup);
+
+  const rect = triggerButton.getBoundingClientRect();
+  const popupRect = popup.getBoundingClientRect();
+  const preferredTop = rect.top + (rect.height / 2) - (popupRect.height / 2);
+  const maxTop = Math.max(12, window.innerHeight - popupRect.height - 12);
+  const top = Math.min(Math.max(12, preferredTop), maxTop);
+  const maxLeft = Math.max(12, window.innerWidth - popupRect.width - 12);
+  const left = Math.min(rect.right + 12, maxLeft);
+  popup.style.top = `${top}px`;
+  popup.style.left = `${left}px`;
+
+  activeWosToolbarPopupTrigger = triggerButton;
+  activeWosToolbarPopupTrigger.setAttribute('aria-expanded', 'true');
+};
+
 const renderWosToolbarShortcutButtons = (shortcutsWrap) => {
   if (!shortcutsWrap) {
     return;
@@ -224,18 +385,28 @@ const renderWosToolbarShortcutButtons = (shortcutsWrap) => {
   shortcutsWrap.replaceChildren();
   const buttons = getWosToolbarShortcutDefinitions();
 
-  buttons.forEach(({ id, title, iconHtml, preferredTab }) => {
+  buttons.forEach(({ id, title, iconHtml, preferredTab, action }) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'wos-aide-toolbar-btn';
     button.dataset.wosAideShortcut = id;
-    button.dataset.wosAideTab = preferredTab;
+    if (preferredTab) {
+      button.dataset.wosAideTab = preferredTab;
+    }
+    if (action) {
+      button.dataset.wosAideAction = action;
+    }
     button.title = title;
     button.setAttribute('aria-label', title);
+    button.setAttribute('aria-expanded', 'false');
     button.innerHTML = iconHtml;
-    button.addEventListener('click', (event) => {
+    button.addEventListener('click', async (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (action === 'sid-info') {
+        await showWosToolbarInfoPopup(button);
+        return;
+      }
       const currentState = getCurrentWosDoiQueryPanelState();
       if (currentState.visible && currentState.mode === 'single' && currentState.tab === preferredTab) {
         const panelElement = document.getElementById(MODULES.wosDoiQuery.elementId);
@@ -546,10 +717,11 @@ const ensureWosToolbarShortcutsStyle = () => {
 }
 #${WOS_TOOLBAR_SHORTCUTS_ID}[data-floating-fallback="true"] {
   position: fixed;
-  top: 180px;
+  top: 50%;
   left: 12px;
   width: 42px;
   margin-top: 0;
+  transform: translateY(-50%);
   z-index: 999998;
   padding: 6px 0;
 }
@@ -606,8 +778,67 @@ const ensureWosToolbarShortcutsStyle = () => {
   display: inline-block;
   pointer-events: none;
 }
+#${WOS_TOOLBAR_INFO_POPUP_ID} {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(74, 59, 136, 0.12);
+  box-shadow: 0 16px 36px rgba(33, 30, 53, 0.18);
+  z-index: 999999;
+}
+#${WOS_TOOLBAR_INFO_POPUP_ID} .wos-aide-toolbar-info-title {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #3d3656;
+  word-break: break-all;
+}
+#${WOS_TOOLBAR_INFO_POPUP_ID} .wos-aide-toolbar-info-action {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid rgba(74, 59, 136, 0.14);
+  border-radius: 10px;
+  background: #f7f6fb;
+  color: #3d3656;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+#${WOS_TOOLBAR_INFO_POPUP_ID} .wos-aide-toolbar-info-action:hover:not(:disabled) {
+  background: #efedf8;
+  border-color: rgba(74, 59, 136, 0.24);
+}
+#${WOS_TOOLBAR_INFO_POPUP_ID} .wos-aide-toolbar-info-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 `;
   (document.head || document.documentElement).appendChild(style);
+};
+
+const getWosToolbarShortcutMountTarget = () => {
+  const topSticky = document.querySelector('.top-sticky');
+  if (!topSticky) {
+    return {
+      container: null,
+      anchor: null
+    };
+  }
+
+  const alertsButton = topSticky.querySelector('[data-pendo-menu-alerts]');
+  const anchor = alertsButton?.parentElement === topSticky ? alertsButton : null;
+
+  return {
+    container: topSticky,
+    anchor
+  };
 };
 
 const ensureWosToolbarShortcuts = () => {
@@ -615,8 +846,7 @@ const ensureWosToolbarShortcuts = () => {
     return;
   }
 
-  const toolbar = document.querySelector('.top-left-panel.ng-star-inserted') || document.querySelector('.top-left-panel');
-  const alertsButton = document.querySelector('[data-pendo-menu-alerts]');
+  const { container: toolbar, anchor: alertsButton } = getWosToolbarShortcutMountTarget();
   ensureWosToolbarShortcutsStyle();
 
   const existing = document.getElementById(WOS_TOOLBAR_SHORTCUTS_ID);
@@ -631,10 +861,9 @@ const ensureWosToolbarShortcuts = () => {
     syncWosToolbarShortcutActiveState();
     if (toolbar) {
       const existingParent = existing.parentElement;
-      const anchorParent = alertsButton?.parentElement || null;
       existing.dataset.floatingFallback = 'false';
       if (existingParent !== toolbar || (alertsButton && existing.previousElementSibling !== alertsButton)) {
-        if (alertsButton && anchorParent === toolbar) {
+        if (alertsButton) {
           alertsButton.insertAdjacentElement('afterend', existing);
         } else {
           toolbar.insertAdjacentElement('beforeend', existing);
@@ -655,8 +884,7 @@ const ensureWosToolbarShortcuts = () => {
 
   if (toolbar) {
     shortcutsWrap.dataset.floatingFallback = 'false';
-    const anchorParent = alertsButton?.parentElement || null;
-    if (alertsButton && anchorParent === toolbar) {
+    if (alertsButton) {
       alertsButton.insertAdjacentElement('afterend', shortcutsWrap);
     } else {
       toolbar.insertAdjacentElement('beforeend', shortcutsWrap);
@@ -693,6 +921,29 @@ document.addEventListener('__WOS_DOI_QUERY_SWITCH_TAB__', (event) => {
   requestAnimationFrame(() => {
     syncWosToolbarShortcutActiveState();
   });
+});
+
+document.addEventListener('click', (event) => {
+  const popup = document.getElementById(WOS_TOOLBAR_INFO_POPUP_ID);
+  if (!popup) {
+    return;
+  }
+
+  if (popup.contains(event.target)) {
+    return;
+  }
+
+  if (activeWosToolbarPopupTrigger?.contains(event.target)) {
+    return;
+  }
+
+  closeWosToolbarInfoPopup();
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    closeWosToolbarInfoPopup();
+  }
 });
 
 let wosToolbarBootstrapStarted = false;
