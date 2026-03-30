@@ -167,6 +167,10 @@ let bridgePromise = null;
 
 const CHAT_API_KEY_STORAGE_KEY = 'wosOpenaiApiKey';
 const CHAT_MODEL_STORAGE_KEY = 'wosOpenaiChatModel';
+const EASYSCHOLAR_VERIFIED_STORAGE_KEY = 'wos-easyscholar-api-key-verified';
+const WOS_QUERY_PROVIDER_STORAGE_KEY = 'wosQueryProvider';
+const WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY = 'wosOpenaiVerified';
+const WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY = 'wosLmStudioVerified';
 const GENERATE_WOS_QUERY_REQUEST_EVENT = '__WOS_AIDE_GENERATE_WOS_QUERY_REQUEST__';
 const GENERATE_WOS_QUERY_RESPONSE_EVENT = '__WOS_AIDE_GENERATE_WOS_QUERY_RESPONSE__';
 const FETCH_EASYSCHOLAR_RANK_REQUEST_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK_REQUEST__';
@@ -180,11 +184,41 @@ const WOS_DOI_QUERY_PANEL_STATE_EVENT = '__WOS_DOI_QUERY_PANEL_STATE__';
 const GET_WOS_SID_INFO_REQUEST_EVENT = '__WOS_AIDE_GET_SID_INFO__';
 const GET_WOS_SID_INFO_RESPONSE_EVENT = '__WOS_AIDE_GET_SID_INFO_RESPONSE__';
 let isEasyScholarEnabledForToolbar = false;
+let isEasyScholarVerifiedForToolbar = false;
 let isWosQueryEnabledForToolbar = false;
+let wosQueryProviderForToolbar = 'openai';
+let isWosQueryOpenAIVerifiedForToolbar = false;
+let isWosQueryLmStudioVerifiedForToolbar = false;
 let currentToolbarPanelMode = 'batch';
 let currentToolbarPanelTab = '';
 let activeWosToolbarPopupTrigger = null;
 let fontAwesomeReadyPromise = null;
+const isJournalQueryAvailableForToolbar = () => (
+  isEasyScholarEnabledForToolbar && isEasyScholarVerifiedForToolbar
+);
+
+const isWosQueryAvailableForToolbar = () => {
+  if (!isWosQueryEnabledForToolbar) {
+    return false;
+  }
+  return wosQueryProviderForToolbar === 'lmstudio'
+    ? isWosQueryLmStudioVerifiedForToolbar
+    : isWosQueryOpenAIVerifiedForToolbar;
+};
+
+const resolveDefaultWosPanelTab = (preferredTab) => {
+  if (preferredTab) {
+    return preferredTab;
+  }
+  if (isWosQueryAvailableForToolbar()) {
+    return 'builder';
+  }
+  if (isJournalQueryAvailableForToolbar()) {
+    return 'journal';
+  }
+  return 'query';
+};
+
 const getWosToolbarShortcutDefinitions = () => {
   const buttons = [
     {
@@ -207,7 +241,7 @@ const getWosToolbarShortcutDefinitions = () => {
     }
   ];
 
-  if (isEasyScholarEnabledForToolbar) {
+  if (isJournalQueryAvailableForToolbar()) {
     buttons.push({
       id: 'journal-query',
       title: 'Journal Query',
@@ -216,7 +250,7 @@ const getWosToolbarShortcutDefinitions = () => {
     });
   }
 
-  if (isWosQueryEnabledForToolbar) {
+  if (isWosQueryAvailableForToolbar()) {
     buttons.push({
       id: 'wos-query',
       title: 'WOS Query',
@@ -702,22 +736,20 @@ const getModuleState = (moduleId) => {
 };
 
 const openWosDoiQueryPanel = (preferredTab, presentation = 'batch', anchorRect = null) => {
+  const resolvedTab = resolveDefaultWosPanelTab(preferredTab);
   const element = document.getElementById(MODULES.wosDoiQuery.elementId);
   const switchTab = () => {
     document.dispatchEvent(new CustomEvent(WOS_DOI_QUERY_PANEL_MODE_EVENT, {
-      detail: { mode: presentation, tab: preferredTab || 'query', anchorRect }
+      detail: { mode: presentation, tab: resolvedTab, anchorRect }
     }));
-    if (!preferredTab) {
-      return;
-    }
     document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
-      detail: { tab: preferredTab }
+      detail: { tab: resolvedTab }
     }));
   };
 
   const showPanel = () => {
     setModuleVisibility('wosDoiQuery', true);
-    if (preferredTab === 'journal') {
+    if (resolvedTab === 'journal') {
       setModuleVisibility('easyscholar', true);
     }
     switchTab();
@@ -743,13 +775,11 @@ const ensureWosToolbarShortcutsReady = () => {
 };
 
 const toggleWosDoiQueryPanel = (preferredTab) => {
+  const resolvedTab = resolveDefaultWosPanelTab(preferredTab);
   const element = document.getElementById(MODULES.wosDoiQuery.elementId);
   const switchTab = () => {
-    if (!preferredTab) {
-      return;
-    }
     document.dispatchEvent(new CustomEvent('__WOS_DOI_QUERY_SWITCH_TAB__', {
-      detail: { tab: preferredTab }
+      detail: { tab: resolvedTab }
     }));
   };
 
@@ -757,6 +787,9 @@ const toggleWosDoiQueryPanel = (preferredTab) => {
     const nextVisible = element.style.display === 'none';
     element.style.display = nextVisible ? 'flex' : 'none';
     setModuleVisibility('wosDoiQuery', nextVisible);
+    if (nextVisible && resolvedTab === 'journal') {
+      setModuleVisibility('easyscholar', true);
+    }
     if (nextVisible) {
       switchTab();
     }
@@ -766,6 +799,9 @@ const toggleWosDoiQueryPanel = (preferredTab) => {
   injectModule('wosDoiQuery');
   setTimeout(() => {
     setModuleVisibility('wosDoiQuery', true);
+    if (resolvedTab === 'journal') {
+      setModuleVisibility('easyscholar', true);
+    }
     switchTab();
   }, 100);
   return { success: true, visible: true, action: 'injected' };
@@ -1393,9 +1429,20 @@ document.addEventListener('keydown', (event) => {
 });
 
 if (isWosPage()) {
-  chrome.storage.local.get(['easyscholarEnabled', 'wosQueryEnabled'], result => {
+  chrome.storage.local.get([
+    'easyscholarEnabled',
+    EASYSCHOLAR_VERIFIED_STORAGE_KEY,
+    'wosQueryEnabled',
+    WOS_QUERY_PROVIDER_STORAGE_KEY,
+    WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY,
+    WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY
+  ], result => {
     isEasyScholarEnabledForToolbar = Boolean(result.easyscholarEnabled);
+    isEasyScholarVerifiedForToolbar = Boolean(result[EASYSCHOLAR_VERIFIED_STORAGE_KEY]);
     isWosQueryEnabledForToolbar = Boolean(result.wosQueryEnabled);
+    wosQueryProviderForToolbar = (result[WOS_QUERY_PROVIDER_STORAGE_KEY] || 'openai').toString().trim().toLowerCase() || 'openai';
+    isWosQueryOpenAIVerifiedForToolbar = Boolean(result[WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY]);
+    isWosQueryLmStudioVerifiedForToolbar = Boolean(result[WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY]);
     bootstrapWosToolbarShortcuts();
     ensureWosToolbarShortcuts();
   });
@@ -1439,8 +1486,24 @@ if (isWosPage()) {
       isEasyScholarEnabledForToolbar = Boolean(changes.easyscholarEnabled.newValue);
       shouldRefreshToolbar = true;
     }
+    if (changes[EASYSCHOLAR_VERIFIED_STORAGE_KEY]) {
+      isEasyScholarVerifiedForToolbar = Boolean(changes[EASYSCHOLAR_VERIFIED_STORAGE_KEY].newValue);
+      shouldRefreshToolbar = true;
+    }
     if (changes.wosQueryEnabled) {
       isWosQueryEnabledForToolbar = Boolean(changes.wosQueryEnabled.newValue);
+      shouldRefreshToolbar = true;
+    }
+    if (changes[WOS_QUERY_PROVIDER_STORAGE_KEY]) {
+      wosQueryProviderForToolbar = (changes[WOS_QUERY_PROVIDER_STORAGE_KEY].newValue || 'openai').toString().trim().toLowerCase() || 'openai';
+      shouldRefreshToolbar = true;
+    }
+    if (changes[WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY]) {
+      isWosQueryOpenAIVerifiedForToolbar = Boolean(changes[WOS_QUERY_OPENAI_VERIFIED_STORAGE_KEY].newValue);
+      shouldRefreshToolbar = true;
+    }
+    if (changes[WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY]) {
+      isWosQueryLmStudioVerifiedForToolbar = Boolean(changes[WOS_QUERY_LMSTUDIO_VERIFIED_STORAGE_KEY].newValue);
       shouldRefreshToolbar = true;
     }
     if (changes.wosAideProjectName) {
