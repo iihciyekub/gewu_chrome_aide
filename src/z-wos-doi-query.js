@@ -491,7 +491,7 @@ window.wosids = [];
     singlePanelCloseBtn.title = "Close panel";
 
     const singlePanelResetBtn = document.createElement("button");
-    singlePanelResetBtn.innerHTML = `<i class="fa-solid fa-rotate-left"></i>`;
+    singlePanelResetBtn.innerHTML = `<i class="fa-solid fa-arrows-left-right-to-line"></i>`;
     singlePanelResetBtn.style.position = "absolute";
     singlePanelResetBtn.style.top = "8px";
     singlePanelResetBtn.style.right = "38px";
