@@ -222,6 +222,7 @@ window.wosids = [];
     // 历史记录管理
     let queryHistory = [];
     let historyIndex = -1;
+    let queryCurrentInput = "";
     let wosQueryHistory = [];
     let wosQueryHistoryIndex = -1;
     let wosQueryCurrentInput = "";
@@ -255,6 +256,7 @@ window.wosids = [];
 
         // 重置历史索引
         historyIndex = -1;
+        queryCurrentInput = "";
     }
 
     function navigateHistory(direction) {
@@ -262,6 +264,9 @@ window.wosids = [];
 
         // direction: 1 = down (newer), -1 = up (older)
         if (direction === -1) {
+            if (historyIndex === -1) {
+                queryCurrentInput = textarea.value;
+            }
             // 按上 - 查看更旧的历史
             if (historyIndex < queryHistory.length - 1) {
                 historyIndex++;
@@ -274,7 +279,7 @@ window.wosids = [];
                 textarea.value = queryHistory[historyIndex];
             } else if (historyIndex === 0) {
                 historyIndex = -1;
-                textarea.value = "";
+                textarea.value = queryCurrentInput;
             }
         }
     }
@@ -711,6 +716,17 @@ window.wosids = [];
         }));
     };
 
+    const isSinglePanelVisible = () => currentPanelMode === 'single' && box.style.display !== 'none';
+
+    const hideSinglePanel = () => {
+        if (!isSinglePanelVisible()) {
+            return;
+        }
+        box.style.display = "none";
+        writeStorage(VISIBILITY_KEY, "false");
+        emitPanelState();
+    };
+
     const queryTabPanel = document.createElement('div');
     queryTabPanel.style.display = 'flex';
     queryTabPanel.style.flexDirection = 'column';
@@ -1010,7 +1026,7 @@ window.wosids = [];
     queryComposer.style.boxShadow = "0 1px 3px rgba(15, 23, 42, 0.04)";
 
     const textarea = document.createElement("textarea");
-    textarea.placeholder = "Enter WOS IDs or DOIs here...\nOne per line\nHistory supported (ctrl(control) + ↑/↓ to navigate)";
+    textarea.placeholder = "Enter WOS IDs or DOIs here...\nOne per line\nHistory supported (↑/↓ or ctrl(control) + ↑/↓ to navigate)";
     textarea.style.width = "100%";
     textarea.style.flex = "1";
     textarea.style.minHeight = "0";
@@ -1030,7 +1046,27 @@ window.wosids = [];
 
     // 添加键盘事件监听
     textarea.addEventListener("keydown", (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === "ArrowUp") {
+        if (
+            e.key === "ArrowUp" &&
+            !e.metaKey &&
+            !e.ctrlKey &&
+            !e.shiftKey &&
+            textarea.selectionStart === textarea.selectionEnd &&
+            isCaretOnFirstLine(textarea)
+        ) {
+            e.preventDefault();
+            navigateHistory(-1);
+        } else if (
+            e.key === "ArrowDown" &&
+            !e.metaKey &&
+            !e.ctrlKey &&
+            !e.shiftKey &&
+            textarea.selectionStart === textarea.selectionEnd &&
+            isCaretOnLastLine(textarea)
+        ) {
+            e.preventDefault();
+            navigateHistory(1);
+        } else if ((e.ctrlKey || e.metaKey) && e.key === "ArrowUp") {
             e.preventDefault();
             navigateHistory(-1);
         } else if ((e.ctrlKey || e.metaKey) && e.key === "ArrowDown") {
@@ -1153,6 +1189,7 @@ window.wosids = [];
 
         const res = extractFromText(text);
         await wos.query_wosid_or_doi(res.wosids, res.dois);
+        hideSinglePanel();
     };
 
     // 创建自动提取切换按钮
@@ -1222,10 +1259,10 @@ window.wosids = [];
 
     const exportUuidInfo = document.createElement('div');
     exportUuidInfo.style.flex = '1';
-    exportUuidInfo.style.padding = '5px 7px';
-    exportUuidInfo.style.background = '#f7f9fb';
-    exportUuidInfo.style.border = '1px solid #d0d9e3';
-    exportUuidInfo.style.borderRadius = '2px';
+    exportUuidInfo.style.padding = '0';
+    exportUuidInfo.style.background = 'transparent';
+    exportUuidInfo.style.border = 'none';
+    exportUuidInfo.style.borderRadius = '0';
     exportUuidInfo.style.color = '#243b53';
     exportUuidInfo.style.fontSize = '10px';
     exportUuidInfo.style.lineHeight = '1.4';
@@ -1233,7 +1270,7 @@ window.wosids = [];
 
     const exportUuidRefreshBtn = document.createElement('button');
     exportUuidRefreshBtn.type = 'button';
-    exportUuidRefreshBtn.innerHTML = '<i class="fa-solid fa-rotate-right"></i>';
+    exportUuidRefreshBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i>';
     exportUuidRefreshBtn.style.width = '24px';
     exportUuidRefreshBtn.style.height = '24px';
     exportUuidRefreshBtn.style.flexShrink = '0';
@@ -1242,7 +1279,7 @@ window.wosids = [];
     exportUuidRefreshBtn.style.justifyContent = 'center';
     exportUuidRefreshBtn.style.padding = '0';
     exportUuidRefreshBtn.style.border = '1px solid #d0d9e3';
-    exportUuidRefreshBtn.style.borderRadius = '2px';
+    exportUuidRefreshBtn.style.borderRadius = '999px';
     exportUuidRefreshBtn.style.background = '#f7f9fb';
     exportUuidRefreshBtn.style.color = '#486581';
     exportUuidRefreshBtn.style.cursor = 'pointer';
@@ -1268,7 +1305,7 @@ window.wosids = [];
     const exportUuidInput = document.createElement('input');
     exportUuidInput.type = 'text';
     exportUuidInput.placeholder = 'Enter UUID';
-    exportUuidInput.style.width = '100%';
+    exportUuidInput.style.flex = '1';
     exportUuidInput.style.height = '24px';
     exportUuidInput.style.padding = '4px 8px';
     exportUuidInput.style.boxSizing = 'border-box';
@@ -1281,21 +1318,15 @@ window.wosids = [];
     const EXPORT_UUID_AUTO_EXTRACT_KEY = 'export-uuid-auto-extract';
     let exportUuidAutoExtractEnabled = readStorage(EXPORT_UUID_AUTO_EXTRACT_KEY, "true") === "true";
 
-    const exportUuidMetaRow = document.createElement('div');
-    exportUuidMetaRow.style.display = 'flex';
-    exportUuidMetaRow.style.alignItems = 'center';
-    exportUuidMetaRow.style.justifyContent = 'space-between';
-    exportUuidMetaRow.style.gap = '8px';
-
-    const exportUuidFormatHint = document.createElement('div');
-    exportUuidFormatHint.style.color = '#6b7c93';
-    exportUuidFormatHint.style.fontSize = '10px';
-    exportUuidFormatHint.style.lineHeight = '1.4';
-    exportUuidFormatHint.textContent = 'UUID format: 8-4-4-4-12-10';
+    const exportUuidInputRow = document.createElement('div');
+    exportUuidInputRow.style.display = 'flex';
+    exportUuidInputRow.style.alignItems = 'center';
+    exportUuidInputRow.style.gap = '8px';
 
     const exportUuidAutoExtractBtn = document.createElement('button');
     exportUuidAutoExtractBtn.style.padding = '3px 8px';
     exportUuidAutoExtractBtn.style.height = '24px';
+    exportUuidAutoExtractBtn.style.flexShrink = '0';
     exportUuidAutoExtractBtn.style.borderRadius = '8px';
     exportUuidAutoExtractBtn.style.cursor = 'pointer';
     exportUuidAutoExtractBtn.style.fontSize = '11px';
@@ -1312,14 +1343,22 @@ window.wosids = [];
     };
     syncExportUuidAutoExtractBtn();
 
+    const applyExportUuidAutoExtract = () => {
+        const currentValue = String(exportUuidInput.value || '').trim();
+        exportUuidInput.value = extractUuidFromText(currentValue) || '';
+    };
+
     exportUuidAutoExtractBtn.onclick = () => {
         exportUuidAutoExtractEnabled = !exportUuidAutoExtractEnabled;
         writeStorage(EXPORT_UUID_AUTO_EXTRACT_KEY, exportUuidAutoExtractEnabled.toString());
         syncExportUuidAutoExtractBtn();
+        if (exportUuidAutoExtractEnabled) {
+            applyExportUuidAutoExtract();
+        }
     };
 
-    exportUuidMetaRow.appendChild(exportUuidFormatHint);
-    exportUuidMetaRow.appendChild(exportUuidAutoExtractBtn);
+    exportUuidInputRow.appendChild(exportUuidInput);
+    exportUuidInputRow.appendChild(exportUuidAutoExtractBtn);
 
     const openUuidPageBtn = document.createElement('button');
     openUuidPageBtn.textContent = 'Open UUID Page';
@@ -1336,8 +1375,7 @@ window.wosids = [];
     openUuidPageBtn.style.boxShadow = 'none';
 
     exportUuidJumpWrap.appendChild(exportUuidJumpHint);
-    exportUuidJumpWrap.appendChild(exportUuidInput);
-    exportUuidJumpWrap.appendChild(exportUuidMetaRow);
+    exportUuidJumpWrap.appendChild(exportUuidInputRow);
     exportUuidJumpWrap.appendChild(openUuidPageBtn);
     exportFlowGroup.appendChild(exportUuidJumpWrap);
 
@@ -1371,31 +1409,6 @@ window.wosids = [];
         return match ? match[0] : '';
     };
 
-    const syncExportUuidInputHint = (value = '') => {
-        const rawValue = String(value || '').trim();
-        if (!rawValue) {
-            exportUuidFormatHint.textContent = 'UUID format: 8-4-4-4-12-10';
-            exportUuidFormatHint.style.color = '#6b7c93';
-            return;
-        }
-
-        const extractedUuid = extractUuidFromText(rawValue);
-        if (extractedUuid && rawValue !== extractedUuid) {
-            exportUuidFormatHint.textContent = `Extracted UUID: ${extractedUuid}`;
-            exportUuidFormatHint.style.color = '#174b78';
-            return;
-        }
-
-        if (isValidUuid(rawValue)) {
-            exportUuidFormatHint.textContent = 'UUID format matched: 8-4-4-4-12-10';
-            exportUuidFormatHint.style.color = '#2f855a';
-            return;
-        }
-
-        exportUuidFormatHint.textContent = 'Invalid UUID. Expected format: 8-4-4-4-12-10';
-        exportUuidFormatHint.style.color = '#a5483f';
-    };
-
     const refreshExportUuidInfo = ({ syncInput = true } = {}) => {
         const uuid = extractUuidFromCurrentUrl();
 
@@ -1410,7 +1423,6 @@ window.wosids = [];
         exportUuidInfo.style.color = '#243b53';
         if (syncInput) {
             exportUuidInput.value = uuid;
-            syncExportUuidInputHint(uuid);
         }
         syncExportUuidMode(uuid);
         return uuid;
@@ -1546,7 +1558,6 @@ window.wosids = [];
             if (window.wos && window.wos.uuid && typeof window.wos.uuid.open === 'function') {
                 await window.wos.uuid.open(uuid);
                 exportUuidInput.value = uuid;
-                syncExportUuidInputHint(uuid);
                 refreshExportUuidInfo();
             } else {
                 throw new Error('window.wos.uuid.open is unavailable');
@@ -1566,19 +1577,14 @@ window.wosids = [];
         }
     });
 
-    exportUuidInput.addEventListener('input', () => {
-        syncExportUuidInputHint(exportUuidInput.value);
-    });
-
     exportUuidInput.addEventListener('paste', (event) => {
         if (!exportUuidAutoExtractEnabled) {
             return;
         }
         event.preventDefault();
         const pastedText = (event.clipboardData || window.clipboardData).getData('text');
-        const extractedUuid = extractUuidFromText(pastedText);
-        exportUuidInput.value = extractedUuid || String(pastedText || '').trim();
-        syncExportUuidInputHint(exportUuidInput.value);
+        const rawValue = String(pastedText || '').trim();
+        exportUuidInput.value = extractUuidFromText(rawValue) || '';
     });
 
     // 尝试从 popup 写入的 handle 恢复目录
@@ -1798,7 +1804,6 @@ window.wosids = [];
     };
 
     syncExportFlowState();
-    syncExportUuidInputHint(exportUuidInput.value);
     refreshExportUuidInfo();
 
 
@@ -2284,7 +2289,7 @@ Additional output rules:
     // 预先声明事件处理器和清理函数
     let dragger = null;
     let resizeCleanup = null;
-    let visibilityHandler, showHandler, hideHandler;
+    let visibilityHandler, showHandler, hideHandler, outsidePointerHandler, escapeKeyHandler;
 
     // 清理函数
     const cleanup = () => {
@@ -2296,6 +2301,8 @@ Additional output rules:
         if (visibilityHandler) document.removeEventListener("__WOS_DOI_QUERY_VISIBILITY__", visibilityHandler);
         if (showHandler) document.removeEventListener("__SHOW_WOS_DOI_QUERY__", showHandler);
         if (hideHandler) document.removeEventListener("__HIDE_WOS_DOI_QUERY__", hideHandler);
+        if (outsidePointerHandler) document.removeEventListener("mousedown", outsidePointerHandler);
+        if (escapeKeyHandler) document.removeEventListener("keydown", escapeKeyHandler);
         // 移除DOM元素
         box.remove();
         console.log("[WOS DOI Query] Resources cleaned up");
@@ -2309,9 +2316,7 @@ Additional output rules:
 
     singlePanelCloseBtn.onclick = (e) => {
         e.stopPropagation();
-        box.style.display = "none";
-        writeStorage(VISIBILITY_KEY, "false");
-        emitPanelState();
+        hideSinglePanel();
     };
 
     singlePanelResetBtn.onclick = (e) => {
@@ -2513,6 +2518,25 @@ Additional output rules:
         console.log("[WOS DOI Query] Panel hidden");
     };
     document.addEventListener("__HIDE_WOS_DOI_QUERY__", hideHandler);
+
+    outsidePointerHandler = (event) => {
+        if (!isSinglePanelVisible()) {
+            return;
+        }
+        if (box.contains(event.target)) {
+            return;
+        }
+        hideSinglePanel();
+    };
+    document.addEventListener("mousedown", outsidePointerHandler);
+
+    escapeKeyHandler = (event) => {
+        if (event.key !== "Escape") {
+            return;
+        }
+        hideSinglePanel();
+    };
+    document.addEventListener("keydown", escapeKeyHandler);
 
     console.log("[WOS DOI Query] Panel initialized and event listeners attached");
 

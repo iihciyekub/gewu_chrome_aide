@@ -174,6 +174,7 @@ const FETCH_EASYSCHOLAR_RANK_RESPONSE_EVENT = '__WOS_AIDE_FETCH_EASYSCHOLAR_RANK
 const WOS_TOOLBAR_SHORTCUTS_ID = 'wos-aide-toolbar-shortcuts';
 const WOS_TOOLBAR_SHORTCUTS_STYLE_ID = 'wos-aide-toolbar-shortcuts-style';
 const WOS_TOOLBAR_INFO_POPUP_ID = 'wos-aide-toolbar-info-popup';
+const WOS_FONT_AWESOME_LINK_ID = 'wosAide-fontawesome';
 const WOS_DOI_QUERY_PANEL_MODE_EVENT = '__WOS_DOI_QUERY_PANEL_MODE__';
 const WOS_DOI_QUERY_PANEL_STATE_EVENT = '__WOS_DOI_QUERY_PANEL_STATE__';
 const GET_WOS_SID_INFO_REQUEST_EVENT = '__WOS_AIDE_GET_SID_INFO__';
@@ -183,6 +184,7 @@ let isWosQueryEnabledForToolbar = false;
 let currentToolbarPanelMode = 'batch';
 let currentToolbarPanelTab = '';
 let activeWosToolbarPopupTrigger = null;
+let fontAwesomeReadyPromise = null;
 const getWosToolbarShortcutDefinitions = () => {
   const buttons = [
     {
@@ -200,7 +202,7 @@ const getWosToolbarShortcutDefinitions = () => {
     {
       id: 'sid-info',
       title: 'SID Info',
-      iconHtml: '<i class="fa-solid fa-info wos-aide-toolbar-icon" aria-hidden="true"></i>',
+      iconHtml: '<i class="fa-solid fa-circle-info wos-aide-toolbar-icon" aria-hidden="true"></i>',
       action: 'sid-info'
     }
   ];
@@ -224,6 +226,70 @@ const getWosToolbarShortcutDefinitions = () => {
   }
 
   return buttons;
+};
+
+const waitForFontAwesomeReady = (attempt = 0) => new Promise((resolve) => {
+  if (hasFontAwesome()) {
+    resolve(true);
+    return;
+  }
+
+  if (attempt >= 24) {
+    resolve(false);
+    return;
+  }
+
+  window.setTimeout(() => {
+    waitForFontAwesomeReady(attempt + 1).then(resolve);
+  }, attempt < 6 ? 60 : 120);
+});
+
+const ensurePageFontAwesome = () => {
+  if (hasFontAwesome()) {
+    return Promise.resolve(true);
+  }
+
+  if (fontAwesomeReadyPromise) {
+    return fontAwesomeReadyPromise;
+  }
+
+  fontAwesomeReadyPromise = new Promise((resolve) => {
+    const finalize = () => {
+      waitForFontAwesomeReady().then((ready) => {
+        if (ready) {
+          resolve(true);
+          return;
+        }
+        fontAwesomeReadyPromise = null;
+        resolve(false);
+      });
+    };
+
+    const existingLink = document.getElementById(WOS_FONT_AWESOME_LINK_ID);
+    if (existingLink) {
+      existingLink.addEventListener('load', finalize, { once: true });
+      existingLink.addEventListener('error', () => {
+        fontAwesomeReadyPromise = null;
+        resolve(false);
+      }, { once: true });
+      finalize();
+      return;
+    }
+
+    const link = document.createElement('link');
+    link.id = WOS_FONT_AWESOME_LINK_ID;
+    link.rel = 'stylesheet';
+    link.href = chrome.runtime.getURL('all.min.css');
+    link.addEventListener('load', finalize, { once: true });
+    link.addEventListener('error', () => {
+      fontAwesomeReadyPromise = null;
+      resolve(false);
+    }, { once: true });
+
+    (document.head || document.documentElement).appendChild(link);
+  });
+
+  return fontAwesomeReadyPromise;
 };
 
 const getWosSidInfo = () => new Promise((resolve) => {
@@ -314,8 +380,13 @@ const createWosToolbarInfoActionButton = (label, value, emptyLabel) => {
     event.stopPropagation();
 
     const copied = await copyTextToClipboard(value);
+    if (copied) {
+      closeWosToolbarInfoPopup();
+      return;
+    }
+
     const originalLabel = label;
-    button.textContent = copied ? 'Copied' : 'Copy failed';
+    button.textContent = 'Copy failed';
 
     if (restoreTimer) {
       clearTimeout(restoreTimer);
@@ -843,6 +914,15 @@ const getWosToolbarShortcutMountTarget = () => {
 
 const ensureWosToolbarShortcuts = () => {
   if (!isWosPage()) {
+    return;
+  }
+
+  if (!hasFontAwesome()) {
+    ensurePageFontAwesome().then((ready) => {
+      if (ready) {
+        ensureWosToolbarShortcuts();
+      }
+    });
     return;
   }
 
