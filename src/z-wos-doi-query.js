@@ -2526,6 +2526,10 @@ Additional output rules:
         if (box.contains(event.target)) {
             return;
         }
+        const toolbarShortcuts = document.getElementById('wos-aide-toolbar-shortcuts');
+        if (toolbarShortcuts?.contains(event.target)) {
+            return;
+        }
         hideSinglePanel();
     };
     document.addEventListener("mousedown", outsidePointerHandler);

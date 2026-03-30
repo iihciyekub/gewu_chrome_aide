@@ -512,13 +512,8 @@ const renderWosToolbarShortcutButtons = (shortcutsWrap) => {
         await showWosToolbarInfoPopup(button);
         return;
       }
-      const currentState = getCurrentWosDoiQueryPanelState();
-      if (currentState.visible && currentState.mode === 'single' && currentState.tab === preferredTab) {
-        const panelElement = document.getElementById(MODULES.wosDoiQuery.elementId);
-        if (panelElement) {
-          panelElement.style.display = 'none';
-          setModuleVisibility('wosDoiQuery', false);
-        }
+      if (isWosToolbarShortcutPanelActive(preferredTab)) {
+        hideWosDoiQueryPanel();
         return;
       }
       const rect = button.getBoundingClientRect();
@@ -551,6 +546,26 @@ const syncWosToolbarShortcutActiveState = () => {
     button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
   });
 };
+
+const isWosToolbarShortcutPanelActive = (tabName) => {
+  const panelElement = document.getElementById(MODULES.wosDoiQuery.elementId);
+  if (!panelElement || panelElement.style.display === 'none' || panelElement.hidden) {
+    return false;
+  }
+  return currentToolbarPanelMode === 'single' && currentToolbarPanelTab === tabName;
+};
+
+const hideWosDoiQueryPanel = () => {
+  const panelElement = document.getElementById(MODULES.wosDoiQuery.elementId);
+  if (panelElement) {
+    panelElement.style.display = 'none';
+  }
+  setModuleVisibility('wosDoiQuery', false);
+  setModuleVisibility('easyscholar', false);
+  currentToolbarPanelTab = '';
+  syncWosToolbarShortcutActiveState();
+};
+
 const getCurrentWosDoiQueryPanelState = () => {
   const element = document.getElementById(MODULES.wosDoiQuery.elementId);
   if (!element || element.style.display === 'none' || element.hidden) {
@@ -559,14 +574,18 @@ const getCurrentWosDoiQueryPanelState = () => {
 
   let panelState = { visible: true, mode: 'batch', tab: '' };
   const handler = (event) => {
+    if (event?.detail?.requestState) {
+      return;
+    }
     panelState = {
-      visible: true,
+      visible: event?.detail?.visible !== false,
       mode: event?.detail?.mode || 'batch',
       tab: event?.detail?.tab || ''
     };
+    document.removeEventListener(WOS_DOI_QUERY_PANEL_STATE_EVENT, handler);
   };
 
-  document.addEventListener(WOS_DOI_QUERY_PANEL_STATE_EVENT, handler, { once: true });
+  document.addEventListener(WOS_DOI_QUERY_PANEL_STATE_EVENT, handler);
   document.dispatchEvent(new CustomEvent(WOS_DOI_QUERY_PANEL_STATE_EVENT, {
     detail: { requestState: true }
   }));
