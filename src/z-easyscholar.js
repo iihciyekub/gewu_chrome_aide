@@ -742,6 +742,74 @@ async function getPublicationRank(SO) {
     let hoverTimer = null;
     let isModifierPressed = false;
     let lastCapturedText = "";
+    const INVALID_CAPTURE_PATTERNS = [
+        /view journal impact/i,
+        /journal information/i,
+        /publisher name/i,
+        /author identifiers?/i,
+        /researcherid/i,
+        /\borcid\b/i,
+        /\babstract\b/i,
+        /\bkeywords?\b/i,
+        /author information/i,
+        /addresses?/i,
+        /research areas/i,
+        /categories?\s*\/\s*classification/i,
+        /funding/i,
+        /accession number/i,
+        /\bissn\b/i,
+        /\beissn\b/i,
+        /\bdoi\b/i,
+        /\bpublished\b/i,
+        /\bindexed\b/i,
+        /source:\s*journal citation reports/i,
+        /open_in_new/i,
+        /arrow_back/i,
+        /arrow_drop_down/i,
+        /arrow_downward/i,
+        /provided by clarivate/i
+    ];
+    const MAX_CAPTURE_LENGTH = 160;
+    const MAX_CAPTURE_WORDS = 18;
+
+    const normalizeCapturedText = (text) => String(text || "")
+        .replace(/\b(?:open_in_new|arrow_back|arrow_drop_down|arrow_downward|chevron_right|expand_more|add)\b/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const extractJournalCandidate = (text) => {
+        const normalized = normalizeCapturedText(text);
+        if (!normalized) {
+            return "";
+        }
+
+        const sourceMatch = normalized.match(/(?:^|\b)Source\s*[:\-]?\s*([A-Z0-9&,:;()\/.\- ][A-Z0-9&()\/.\-])(?=\s+(?:Publisher name|Journal Impact Factor|Volume|Issue|DOI|Published|Indexed)\b|$)/i);
+        if (sourceMatch?.[1]) {
+            return normalizeCapturedText(sourceMatch[1]);
+        }
+
+        return normalized;
+    };
+
+    const isLikelyJournalCandidate = (text) => {
+        const candidate = extractJournalCandidate(text);
+        if (!candidate) {
+            return false;
+        }
+        if (candidate.length > MAX_CAPTURE_LENGTH) {
+            return false;
+        }
+        if (candidate.split(/\s+/).filter(Boolean).length > MAX_CAPTURE_WORDS) {
+            return false;
+        }
+        if (candidate.includes("\n")) {
+            return false;
+        }
+        if (INVALID_CAPTURE_PATTERNS.some((pattern) => pattern.test(candidate))) {
+            return false;
+        }
+        return /[A-Za-z]/.test(candidate);
+    };
 
     const getTextFromNode = (node) => {
         if (!node) {
@@ -767,12 +835,13 @@ async function getPublicationRank(SO) {
     const getCapturedTextFromEvent = (event) => {
         const path = event.composedPath ? event.composedPath() : [];
         for (const node of path) {
-            const text = getTextFromNode(node);
-            if (text) {
-                return text;
+            const candidate = extractJournalCandidate(getTextFromNode(node));
+            if (isLikelyJournalCandidate(candidate)) {
+                return candidate;
             }
         }
-        return getTextFromNode(event.target);
+        const fallbackCandidate = extractJournalCandidate(getTextFromNode(event.target));
+        return isLikelyJournalCandidate(fallbackCandidate) ? fallbackCandidate : "";
     };
 
     const isInsideExtensionPanel = (event) => {
